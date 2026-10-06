@@ -19,7 +19,7 @@ from src.security import hash_password, needs_rehash, verify_password
 from src.trading.accounts import create_user
 
 APP_DIR = Path(__file__).resolve().parent.parent / "app"
-TRADER_APP = str(APP_DIR / "trader_app.py")
+TRADER_APP = str(APP_DIR / "trader" / "app.py")
 ADMIN_APP = str(APP_DIR / "admin_app.py")
 
 

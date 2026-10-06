@@ -10,8 +10,8 @@ from sqlalchemy import select
 
 from src.analytics import charts
 from src.analytics.metrics import (
-    daily_returns, drawdown, equity_curve, max_drawdown, pnl_by_symbol, sharpe_ratio,
-    summary, trade_stats,
+    calendar_frame, daily_returns, drawdown, equity_curve, historical_cvar, historical_var,
+    max_drawdown, pnl_by_symbol, sharpe_ratio, summary, trade_stats,
 )
 from src.config import STARTING_CASH
 from src.db.models import Candle, Instrument, Trade
@@ -58,6 +58,48 @@ def test_trade_stats():
     assert s["avg_win"] == 65 and s["avg_loss"] == -50
     assert s["profit_factor"] == pytest.approx(130 / 50)
     assert s["total_charges"] == 6
+
+
+# 21 daily returns: three bad days, eighteen +1% days.
+# Sorted: -5%, -3%, -2%, +1%, ...  The 5th percentile sits at position
+# (21 - 1) x 0.05 = 1.0, i.e. exactly the 2nd-worst day: -3%.
+RISK_RETURNS = pd.Series([0.01] * 9 + [-0.05] + [0.01] * 5 + [-0.02, -0.03] + [0.01] * 4)
+
+
+def test_historical_var():
+    assert len(RISK_RETURNS) == 21
+    assert historical_var(RISK_RETURNS) == pytest.approx(0.03)
+
+
+def test_historical_cvar_averages_the_tail():
+    # Days at or below -3%: -5% and -3%  ->  average -4%  ->  CVaR 4%
+    assert historical_cvar(RISK_RETURNS) == pytest.approx(0.04)
+    assert historical_cvar(RISK_RETURNS) >= historical_var(RISK_RETURNS)
+
+
+def test_var_needs_enough_days():
+    short = RISK_RETURNS.head(19)
+    assert historical_var(short) is None and historical_cvar(short) is None
+
+
+def test_var_with_interpolation():
+    # 41 returns -0.20, -0.19, ..., +0.20. Position (41 - 1) x 0.05 = 2.0 -> 3rd worst = -0.18
+    returns = pd.Series(np.round(np.arange(-20, 21) / 100, 2))
+    assert historical_var(returns) == pytest.approx(0.18)
+    # tail = -0.20, -0.19, -0.18 -> average -0.19
+    assert historical_cvar(returns) == pytest.approx(0.19)
+
+
+def test_calendar_frame_places_days_on_the_grid():
+    dates = pd.Series(pd.to_datetime(["2024-01-01", "2024-01-03", "2024-01-05", "2024-01-08"]))
+    values = pd.Series([100.0, -50.0, 20.0, 7.0])  # Mon, Wed, Fri, next Mon
+    grid = calendar_frame(dates, values)
+    week1, week2 = pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-08")
+    assert list(grid.index) == [0, 1, 2, 3, 4]       # Mon..Fri always present
+    assert list(grid.columns) == [week1, week2]      # one column per week (its Monday)
+    assert grid.loc[0, week1] == 100 and grid.loc[2, week1] == -50 and grid.loc[4, week1] == 20
+    assert grid.loc[0, week2] == 7
+    assert np.isnan(grid.loc[1, week1])              # Tuesday had no trading
 
 
 def test_trade_stats_with_no_trades():
@@ -172,6 +214,17 @@ def test_summary(session, user):
     assert s["days"] == 5
     assert s["max_drawdown"] < 0  # TCS dipped to 94 on the way
     assert s["sharpe"] is not None
+    # Day P&L = today's equity - yesterday's close equity
+    curve = equity_curve(session, user.id, as_of=get_clock(session))
+    assert s["day_pnl"] == pytest.approx(curve["equity"].iloc[-1] - curve["equity"].iloc[-2])
+    assert s["var_95"] is None  # only 5 days: too few for a 95% VaR
+
+
+def test_moving_average():
+    bars = pd.DataFrame({"close": [1.0, 2.0, 3.0, 4.0]})
+    ma = charts.add_moving_averages(bars, (2,))["MA2"]
+    assert ma.isna().iloc[0]
+    assert ma.iloc[1:].tolist() == [1.5, 2.5, 3.5]
 
 
 def test_charts_build_without_errors(session, user):
@@ -180,15 +233,18 @@ def test_charts_build_without_errors(session, user):
     run(session, 3)
     curve = equity_curve(session, user.id, as_of=get_clock(session))
     bars = pd.DataFrame({"timestamp": [day(1), day(2)], "open": [1, 2], "high": [2, 3],
-                         "low": [0.5, 1.5], "close": [1.5, 2.5]})
+                         "low": [0.5, 1.5], "close": [1.5, 2.5], "volume": [100, 200]})
     figures = [
         charts.equity_chart(curve, STARTING_CASH),
         charts.drawdown_chart(curve),
         charts.daily_pnl_chart(curve),
         charts.pnl_by_symbol_chart(pnl_by_symbol(session, user.id, as_of=get_clock(session))),
-        charts.candle_chart(bars, "TCS"),
     ]
     assert all(len(f.data) == 1 for f in figures)
+    # Price chart: candles + 2 moving averages + volume
+    assert len(charts.price_volume_chart(bars, "TCS", ma_windows=(2, 3)).data) == 4
+    heat = charts.pnl_calendar_chart(calendar_frame(curve["date"], curve["day_pnl"]))
+    assert heat.data[0].type == "heatmap" and heat.data[0].zmid == 0
     # Loss days are drawn red, gain days blue
     colours = figures[2].data[0].marker.color
     assert set(colours) <= {charts.GAIN, charts.LOSS}

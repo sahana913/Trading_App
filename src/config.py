@@ -52,3 +52,5 @@ SQUARE_OFF_TIME = time(15, 15)
 # (otherwise one trader's "Next day" moves time for everybody).
 TRADER_CAN_MOVE_CLOCK = True
 CHART_BARS = 120  # how many recent candles the price chart shows
+MA_WINDOWS = (20, 50)  # moving averages drawn on the price chart (in bars)
+WATCHLIST_REFRESH_SECONDS = 2

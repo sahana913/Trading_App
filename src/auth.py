@@ -7,10 +7,13 @@ Two layers:
   2. Streamlit helpers (require_role, login_page, logout) that draw the forms
      and remember who is logged in using st.session_state.
 
-Using it in an app is one line at the top:
+Single-page app: one line at the top:
     user = require_role("admin", "Admin Dashboard")
 If nobody is logged in, the login form is shown and the rest of the page is
 not run (st.stop()). Otherwise `user` is {"id", "username", "role"}.
+
+Multipage app (app/trader/app.py): call session_user() and offer only the
+login page while it returns None.
 """
 
 import os
@@ -180,24 +183,36 @@ def login_page(title: str, allow_register: bool) -> None:
                         st.rerun()
 
 
-def require_role(role: str, title: str, allow_register: bool = False) -> dict:
-    """Gatekeeper for a page. Returns the logged-in user or stops the page."""
+def session_user() -> dict | None:
+    """The logged-in user, re-checked against the database; None if logged out."""
     info = current_user()
     if info is not None and not _still_valid(info):
         logout()
         st.warning("Your session ended because your account changed. Please log in again.")
         info = None
+    return info
 
-    if info is None:
-        login_page(title, allow_register)
-        st.stop()  # nothing below require_role() runs until someone logs in
 
+def block_wrong_role(info: dict, role: str) -> None:
+    """Stop the page if the user's role doesn't match (with a way to log out)."""
     if not has_role(info["role"], role):
         st.error(f"This app is for {role} accounts only. You are logged in as a {info['role']}.")
         st.button("Log out", on_click=logout, key="wrong_role_logout")
         st.stop()
 
+
+def account_sidebar(info: dict) -> None:
     with st.sidebar:
         st.write(f"Signed in as **{info['username']}** ({info['role']})")
         st.button("Log out", on_click=logout, key="logout")
+
+
+def require_role(role: str, title: str, allow_register: bool = False) -> dict:
+    """Gatekeeper for a single-page app. Returns the logged-in user or stops the page."""
+    info = session_user()
+    if info is None:
+        login_page(title, allow_register)
+        st.stop()  # nothing below require_role() runs until someone logs in
+    block_wrong_role(info, role)
+    account_sidebar(info)
     return info

@@ -7,13 +7,33 @@ Two kinds of functions:
   * loaders (equity_curve, pnl_by_symbol, summary) that read the database and
     feed the pure functions.
 
-Definitions used everywhere (you should be able to say these in a viva):
-  equity        cash + blocked cash + holdings at market price + open MIS P&L
-  daily return  today's equity / yesterday's equity - 1
-  drawdown      how far equity is below its highest point so far (e.g. -5%)
-  Sharpe ratio  average daily return / std of daily returns x sqrt(252),
-                with a 0% risk-free rate. Above 1 is good, above 2 very good.
-  win rate      share of CLOSING trades that made money (before charges)
+Every formula used (you should be able to say these in a viva):
+
+  equity_t       = cash + blocked cash + holdings x price_t + open MIS P&L
+  day P&L_t      = equity_t - equity_(t-1)          (day 1: equity_1 - starting cash)
+  daily return_t = equity_t / equity_(t-1) - 1
+  total P&L      = equity_now - starting cash        (after all charges)
+
+  drawdown_t     = equity_t / max(starting cash, equity_1..equity_t) - 1
+                   e.g. peak 110, now 99 -> 99/110 - 1 = -10%
+  max drawdown   = the smallest (most negative) drawdown_t
+
+  Sharpe ratio   = mean(daily return) / std(daily return) x sqrt(252)
+                   (risk-free rate taken as 0; sqrt(252) turns a daily ratio into
+                   a yearly one because there are ~252 trading days a year)
+
+  win rate       = winning closing trades / all closing trades
+  profit factor  = sum of winning trades' P&L / |sum of losing trades' P&L|
+                   (above 1 = the strategy made more than it lost)
+
+  VaR 95%        = -(5th percentile of daily returns)
+                   "On 95% of days the loss was no bigger than this."
+                   Historical method: no bell-curve assumption, just the
+                   actual past days. 5th percentile uses numpy's default
+                   linear interpolation between the two nearest values.
+  CVaR 95%       = -(average of the daily returns at or below that 5th percentile)
+                   "On the worst 5% of days, the average loss was this."
+                   Always >= VaR, because it averages the tail beyond it.
 """
 
 from datetime import datetime
@@ -29,6 +49,8 @@ from src.trading.books import portfolio_value
 from src.trading.market import get_ltp
 
 TRADING_DAYS_PER_YEAR = 252
+RISK_CONFIDENCE = 0.95  # VaR / CVaR level
+MIN_DAYS_FOR_VAR = 20   # with fewer days the "worst 5%" is less than one day
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +87,39 @@ def sharpe_ratio(returns: pd.Series) -> float | None:
     if std == 0 or np.isnan(std):
         return None
     return float(returns.mean() / std * np.sqrt(TRADING_DAYS_PER_YEAR))
+
+
+def historical_var(returns: pd.Series, confidence: float = RISK_CONFIDENCE) -> float | None:
+    """Value at Risk as a positive fraction (0.021 = 2.1% of equity), or None
+    if there are fewer than MIN_DAYS_FOR_VAR days."""
+    returns = returns.dropna()
+    if len(returns) < MIN_DAYS_FOR_VAR:
+        return None
+    cutoff = np.percentile(returns, (1 - confidence) * 100)  # 5th percentile
+    return float(-cutoff)  # a loss, reported as a positive number
+
+
+def historical_cvar(returns: pd.Series, confidence: float = RISK_CONFIDENCE) -> float | None:
+    """Conditional VaR (expected shortfall): average loss on the worst days."""
+    returns = returns.dropna()
+    if len(returns) < MIN_DAYS_FOR_VAR:
+        return None
+    cutoff = np.percentile(returns, (1 - confidence) * 100)
+    tail = returns[returns <= cutoff]  # the worst ~5% of days
+    return float(-tail.mean())
+
+
+def calendar_frame(dates: pd.Series, values: pd.Series) -> pd.DataFrame:
+    """Reshape daily values into a calendar grid for the heatmap.
+
+    Rows = weekday (Mon..Fri), columns = the Monday of each week, cells = the
+    day's value (NaN where there was no trading, e.g. a holiday).
+    """
+    df = pd.DataFrame({"date": pd.to_datetime(dates), "value": values.to_numpy()})
+    df["weekday"] = df["date"].dt.dayofweek                          # 0 = Monday
+    df["week"] = df["date"] - pd.to_timedelta(df["weekday"], unit="D")  # that week's Monday
+    grid = df.pivot_table(index="weekday", columns="week", values="value", aggfunc="sum")
+    return grid.reindex(range(5))  # always Mon-Fri, even if a weekday never traded
 
 
 def trade_stats(realised: pd.Series, fees: pd.Series) -> dict:
@@ -172,10 +227,18 @@ def summary(session: Session, user_id: int, as_of: datetime | None = None) -> di
     live = portfolio_value(session, user_id, as_of)
 
     stats = trade_stats(trades["realised_pnl"].astype(float), trades["fees"])
+    returns = curve["daily_return"] if not curve.empty else pd.Series(dtype=float)
+    var, cvar = historical_var(returns), historical_cvar(returns)
     return {
         "equity": live["equity"],
         "total_pnl": live["equity"] - start,  # after charges
         "total_return": live["equity"] / start - 1,
+        "day_pnl": float(curve["day_pnl"].iloc[-1]) if not curve.empty else 0.0,
+        # VaR/CVaR as a share of equity, and in rupees at today's equity
+        "var_95": var,
+        "cvar_95": cvar,
+        "var_95_amount": var * live["equity"] if var is not None else None,
+        "cvar_95_amount": cvar * live["equity"] if cvar is not None else None,
         "realised_pnl": live["realised_pnl"],
         "unrealised_pnl": live["unrealised_pnl"],
         "sharpe": sharpe_ratio(curve["daily_return"]) if not curve.empty else None,

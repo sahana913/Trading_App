@@ -1,0 +1,16 @@
+# Streamlit settings, read automatically when you run `streamlit run` from the
+# project root. The admin app overrides the port on its command line.
+
+[server]
+port = 8501
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#3987e5"           # buttons, sliders, selected tabs
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#1a1d24"  # sidebar, inputs, cards
+textColor = "#e6e6e3"
+font = "sans serif"
