@@ -64,7 +64,7 @@ else:
         clock = get_clock(s)
         cfg = settings(s)
         st.subheader("Market")
-        st.write(f"**{clock:%d %b %Y}**" if clock else "Not started")
+        st.write(f"**{ui.market_time(clock)}**" if clock else "Not started")
         st.caption(f"{'▶ running' if cfg['is_running'] else '⏸ paused'} · {cfg['mode']} mode")
 
 # Shared by every page: drawn here, just before the chosen page runs

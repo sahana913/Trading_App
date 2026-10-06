@@ -36,7 +36,7 @@ def live_holdings() -> None:
     c[0].metric("Invested", ui.money(stats["totalinvvalue"]))
     c[1].metric("Current value", ui.money(stats["totalholdingvalue"]))
     c[2].metric("P&L", ui.money(stats["totalprofitandloss"]), f"{stats['totalpnlpercentage']:+.2f}%")
-    st.caption(f"Prices as of {now:%d %b %Y} · refreshes every {WATCHLIST_REFRESH_SECONDS}s")
+    st.caption(f"Prices as of {ui.market_time(now)} · refreshes every {WATCHLIST_REFRESH_SECONDS}s")
     st.dataframe(pd.DataFrame(data["holdings"]), hide_index=True, width="stretch",
                  column_config={"average_price": "Avg price", "ltp": "Last price",
                                 "pnlpercent": st.column_config.NumberColumn("P&L %", format="%.2f%%")})

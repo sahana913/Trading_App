@@ -19,8 +19,8 @@ from src.trading.simulator import get_clock
 
 user = current_user()
 st.title("Positions")
-st.caption("Intraday (MIS) positions. They are closed automatically at each day's close, "
-           "so they only exist during the day they were opened.")
+st.caption("Intraday (MIS) positions. They are closed automatically at 15:15 (intraday mode) or at "
+           "the day's close (daily mode), so they only exist during the day they were opened.")
 
 with db()() as s:
     ui.require_clock(s)
@@ -41,7 +41,7 @@ def live_positions() -> None:
     c[0].metric("Open positions", len(open_now))
     c[1].metric("Unrealised P&L", ui.money(df["unrealised_pnl"].sum()))
     c[2].metric("Realised P&L", ui.money(df["realised_pnl"].sum()))
-    st.caption(f"Prices as of {now:%d %b %Y} · refreshes every {WATCHLIST_REFRESH_SECONDS}s")
+    st.caption(f"Prices as of {ui.market_time(now)} · refreshes every {WATCHLIST_REFRESH_SECONDS}s")
     st.dataframe(df, hide_index=True, width="stretch",
                  column_config={"average_price": "Avg price", "ltp": "Last price",
                                 "realised_pnl": "Realised", "unrealised_pnl": "Unrealised",

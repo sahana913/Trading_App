@@ -43,7 +43,11 @@ records every admin action.
 - **Login and registration** with bcrypt-hashed passwords, roles (trader / admin) and
   disabled accounts. Every new trader starts with **₹10,00,000** of virtual cash.
 - **Trading terminal**: live-refreshing watchlist (▲/▼ change), candlestick chart with
-  20/50-day moving averages and volume, and an order form.
+  20/50-day moving averages and volume (today's candle grows live in intraday mode), and an order form.
+- **Intraday mode**: each trading day plays out in 75 five-minute steps from 09:15 to 15:30.
+  Prices follow a random path (a Brownian bridge) that is pinned to the day's real open, high,
+  low and close, with U-shaped volume. Traders only ever see the day so far, and MIS positions
+  get real intraday profit and loss before the automatic 15:15 square-off.
 - **Order types** MARKET, LIMIT, SL and SL-M; **products** CNC (delivery) and MIS
   (intraday, 5× leverage, auto square-off at the day's close). Margin is blocked on
   placement and released on fill or cancel; brokerage, STT, exchange fees, SEBI fee,
@@ -61,8 +65,8 @@ records every admin action.
 - **Overview**: traders, active today, orders and traded value, platform P&L, charts over time.
 - **Users**: search, view any trader's portfolio and trades, top up, reset, enable/disable.
 - **Leaderboard** by total P&L or Sharpe ratio.
-- **Market control**: start/pause automatic advancing, step days, speed, replay or
-  synthetic mode, and volatility of synthetic prices.
+- **Market control**: start/pause automatic advancing, intraday (5-minute) or daily steps,
+  speed, replay or synthetic mode, and volatility of synthetic prices.
 - **Instruments**: add, edit, remove (instruments with history are deactivated, never deleted).
 - **ML Ops**: model registry, one-click retrain, version comparison, choose the active
   version, and **anomaly flags** for unusual trading behaviour.
@@ -113,9 +117,10 @@ flowchart LR
 ```
 
 **Key ideas**
-- **One simulated clock** (`sim_clock` table) shared by every page and both apps. "Now"
-  is always a bar time; every price lookup is "latest candle at or before now", so the
-  apps and the ML signals can never see the future.
+- **One simulated clock** (`sim_clock` table) shared by every page and both apps. Every
+  price lookup is "latest candle at or before now", so the apps and the ML signals can
+  never see the future. Mid-session (intraday mode), today's daily candle is replaced by
+  the part of the day that has happened so far, and the ML model only sees finished days.
 - **Thin UI, testable core**: the Streamlit pages only draw; all rules live in `src/`
   as plain functions that the tests call directly.
 - **Defence in depth for admin actions**: the admin app only registers its pages for
@@ -295,12 +300,13 @@ app's own heartbeat off, so the market is never advanced twice.
 .venv\Scripts\python.exe -m pytest
 ```
 
-**251 tests** (about 3 minutes) covering:
+**268 tests** (about 3 minutes) covering:
 - data cleaning and validation, and the database models and seed;
 - the trading engine: fills, partial fills, rejections, cancellations, margin, charges,
   P&L, and a "money is never created or lost" check;
-- the simulator, analytics maths (hand-checked VaR, CVaR, Sharpe, drawdown), and the
-  ML pipeline (look-ahead leakage, splits, reproducibility, backtest);
+- the simulator, including intraday mode (paths pinned to the real candle, no look-ahead
+  at 11:00, real MIS P&L), analytics maths (hand-checked VaR, CVaR, Sharpe, drawdown), and
+  the ML pipeline (look-ahead leakage, splits, reproducibility, backtest);
 - the anomaly detector;
 - both Streamlit apps, clicked through with Streamlit's `AppTest`, including **non-admins
   being blocked** from every admin page and every admin function.
@@ -346,8 +352,9 @@ a different database (the tests use it).
 ---
 
 ## Limitations
-- **Daily data.** Intraday (MIS) trades open and close at the same daily price, so they
-  only lose charges; intraday candles would be needed to make MIS meaningful.
+- **Simulated intraday prices.** Intraday mode invents the path inside each real daily
+  candle; only the open, high, low and close are real. In daily mode MIS trades open and
+  close at the same price, so use intraday mode for them.
 - **Simplified execution.** Fills happen at the bar's close; SL orders don't remember
   being triggered; there's no order book, slippage or T+1 settlement.
 - **Small sample.** 10 stocks over 4 years is little data for ML or risk conclusions;

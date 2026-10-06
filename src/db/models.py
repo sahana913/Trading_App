@@ -307,3 +307,4 @@ class SimClock(Base):
     speed_seconds: Mapped[float | None] = mapped_column(Float)          # real seconds per bar   [5]
     volatility: Mapped[float | None] = mapped_column(Float)             # synthetic vol x        [1.0]
     last_tick_at: Mapped[datetime | None] = mapped_column(DateTime)     # wall-clock time of last auto step
+    intraday: Mapped[bool | None] = mapped_column(Boolean)              # 5-minute steps within the day [False]

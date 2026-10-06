@@ -26,6 +26,7 @@ from src.ml.evaluate import THRESHOLD
 from src.ml.features import FEATURE_COLUMNS, build_features, usable_rows
 from src.ml.report import MODEL_NAME
 from src.ml.split import time_split
+from src.trading.intraday import day_start, is_intraday
 
 
 def active_model(session: Session) -> ModelRegistry | None:
@@ -58,6 +59,10 @@ def candles_frame(session: Session, as_of: datetime | None = None,
              .join(Instrument, Candle.instrument_id == Instrument.id))
     if not include_synthetic:
         query = query.where(Candle.is_synthetic.is_not(True))  # real history only
+    if is_intraday(as_of):
+        # Mid-session: today's daily candle isn't finished, so the model only
+        # sees completed days (its features are built on daily closes)
+        query = query.where(Candle.timestamp != day_start(as_of))
     if as_of is not None:
         query = query.where(Candle.timestamp <= as_of)  # the model must not see the future
     return pd.DataFrame(session.execute(query).all(),

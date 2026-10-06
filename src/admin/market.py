@@ -17,9 +17,10 @@ def _logged(session: Session, admin_id: int, action: str, result: dict, details:
     return result
 
 
-def start_market(session: Session, admin_id: int, when: datetime) -> dict:
+def start_market(session: Session, admin_id: int, when: datetime, intraday: bool = False) -> dict:
     require_admin(session, admin_id)
-    return _logged(session, admin_id, "market_start", simulator.start(session, when), {"date": when.isoformat()})
+    return _logged(session, admin_id, "market_start", simulator.start(session, when, intraday=intraday),
+                   {"date": when.isoformat(), "intraday": intraday})
 
 
 def set_running(session: Session, admin_id: int, running: bool) -> dict:

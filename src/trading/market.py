@@ -9,6 +9,11 @@ as_of": only candles at or before it are visible. as_of=None means "use the
 newest candle we have". The latest visible candle's close is the LTP (last
 traded price), and its timestamp is the simulated "now". A market simulator
 just has to move as_of forward bar by bar.
+
+Intraday mode (as_of has a time of day, e.g. 11:05): a DAILY candle for
+today (stamped at today's midnight) is NOT visible as a whole, because its
+high, low and close are still in the future. It is replaced by a PartialBar
+showing today up to as_of (see intraday.py). Any other candle is unaffected.
 """
 
 from datetime import datetime, timedelta
@@ -17,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.db.models import Candle, Instrument
+from src.trading.intraday import day_start, is_intraday, partial_bar
 
 
 def success(data=None, **extra) -> dict:
@@ -45,12 +51,15 @@ def get_instrument(session: Session, symbol: str, exchange: str) -> Instrument |
 
 def recent_candles(session: Session, instrument_id: int, as_of: datetime | None = None,
                    count: int = 1) -> list[Candle]:
-    """The newest `count` candles at or before as_of, newest first."""
+    """The newest `count` candles at or before as_of, newest first.
+    Mid-session, today's daily candle is swapped for its PartialBar."""
     query = select(Candle).where(Candle.instrument_id == instrument_id)
     if as_of is not None:
         query = query.where(Candle.timestamp <= as_of)  # never peek into the future
-    query = query.order_by(Candle.timestamp.desc()).limit(count)
-    return list(session.scalars(query))
+    bars = list(session.scalars(query.order_by(Candle.timestamp.desc()).limit(count)))
+    if is_intraday(as_of) and bars and bars[0].timestamp == day_start(as_of):
+        bars[0] = partial_bar(bars[0], as_of)  # today so far, not today's final candle
+    return bars
 
 
 def latest_candle(session: Session, instrument_id: int, as_of: datetime | None = None) -> Candle | None:
@@ -85,7 +94,8 @@ def quotes(session: Session, symbol: str, exchange: str, as_of: datetime | None 
         "open": bar.open,
         "high": bar.high,
         "low": bar.low,
-        "volume": bar.volume,
+        # intraday: everything traded so far today, not just the last 5 minutes
+        "volume": getattr(bar, "day_volume", bar.volume),
         "prev_close": prev_close,
         # Simulated data has no order book, so bid and ask are both the LTP
         "bid": bar.close,
@@ -111,9 +121,13 @@ def history(session: Session, symbol: str, exchange: str,
     if as_of is not None:
         query = query.where(Candle.timestamp <= as_of)
 
-    rows = [
-        {"timestamp": c.timestamp, "open": c.open, "high": c.high,
-         "low": c.low, "close": c.close, "volume": c.volume}
-        for c in session.scalars(query.order_by(Candle.timestamp))
-    ]
+    rows = []
+    for c in session.scalars(query.order_by(Candle.timestamp)):
+        if is_intraday(as_of) and c.timestamp == day_start(as_of):
+            c = partial_bar(c, as_of)  # today's candle as it looks right now (it grows during the day)
+            rows.append({"timestamp": day_start(as_of), "open": c.open, "high": c.high,
+                         "low": c.low, "close": c.close, "volume": c.day_volume})
+        else:
+            rows.append({"timestamp": c.timestamp, "open": c.open, "high": c.high,
+                         "low": c.low, "close": c.close, "volume": c.volume})
     return success(rows)

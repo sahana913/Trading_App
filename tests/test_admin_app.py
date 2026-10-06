@@ -143,7 +143,8 @@ def test_start_market_and_change_settings_from_the_market_page(admin_db):
     at.button(key="admin_start").click()
     at = run(at)
     with admin_db() as s:
-        assert get_clock(s) == FIRST_DAY
+        assert get_clock(s) == FIRST_DAY.replace(hour=9, minute=15)   # intraday is the default: opens 09:15
+        assert settings(s)["intraday"] is True
 
     at.radio(key="mode").set_value("synthetic")
     at.slider(key="speed").set_value(2.0)
@@ -153,5 +154,5 @@ def test_start_market_and_change_settings_from_the_market_page(admin_db):
     run(at)
     with admin_db() as s:
         cfg = settings(s)
-    assert (cfg["mode"], cfg["speed_seconds"], cfg["is_running"]) == ("synthetic", 2.0, True)
+    assert (cfg["mode"], cfg["speed_seconds"], cfg["is_running"], cfg["intraday"]) == ("synthetic", 2.0, True, True)
     assert audit_actions(admin_db) == ["login", "market_start", "market_settings", "market_resume"]

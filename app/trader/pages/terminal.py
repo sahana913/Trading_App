@@ -1,10 +1,10 @@
 """
 Trading Terminal: live watchlist | price chart | order form.
 
-The watchlist is a "fragment": a piece of the page that re-runs on its own
-every WATCHLIST_REFRESH_SECONDS without redrawing the rest of the page, so
-the order form you're typing into is not reset. Prices only change when the
-simulated clock moves (Next day, or another user/admin moving it).
+The watchlist and the chart are "fragments": pieces of the page that re-run
+on their own every WATCHLIST_REFRESH_SECONDS without redrawing the rest, so
+the order form you're typing into is not reset. Prices change whenever the
+simulated clock moves; in intraday mode today's candle grows step by step.
 """
 
 import pandas as pd
@@ -59,7 +59,7 @@ def watchlist() -> None:
         .map(colour_change, subset=["Change %"])
     )
     st.subheader("Watchlist")
-    st.caption(f"{now:%d %b %Y} · refreshes every {WATCHLIST_REFRESH_SECONDS}s")
+    st.caption(f"{ui.market_time(now)} · refreshes every {WATCHLIST_REFRESH_SECONDS}s")
     st.dataframe(styled, hide_index=True, width="stretch", height=38 + 35 * len(table))
 
 
@@ -68,16 +68,24 @@ col_watch, col_chart, col_order = st.columns([1.35, 2.25, 1.1], gap="medium")
 with col_watch:
     watchlist()
 
-with col_chart:
+
+
+@st.fragment(run_every=WATCHLIST_REFRESH_SECONDS)
+def live_chart() -> None:
     chart_symbol = st.selectbox("Chart", list(symbols), key="chart_symbol")
     with db()() as s:
-        bars = pd.DataFrame(history(s, chart_symbol, symbols[chart_symbol], as_of=clock)["data"])
+        bars = pd.DataFrame(history(s, chart_symbol, symbols[chart_symbol], as_of=get_clock(s))["data"])
     if bars.empty:
         st.warning(f"No price data for {chart_symbol} yet.")
     else:
         # Pass the full history: moving averages need the bars before the visible window
         st.plotly_chart(charts.price_volume_chart(bars, chart_symbol, MA_WINDOWS, CHART_BARS),
-                        width="stretch")
+                        width="stretch", key="price_chart")
+
+
+with col_chart:
+    live_chart()
+chart_symbol = st.session_state.get("chart_symbol", next(iter(symbols)))  # the order form follows the chart
 
 with col_order:
     st.subheader("Place order")

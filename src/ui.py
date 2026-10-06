@@ -8,8 +8,9 @@ from datetime import datetime
 import streamlit as st
 from sqlalchemy.orm import Session
 
-from src.config import TRADER_CAN_MOVE_CLOCK
-from src.trading.simulator import get_clock, run, start, status, step
+from src.config import TRADER_CAN_MOVE_CLOCK, WATCHLIST_REFRESH_SECONDS
+from src.trading.intraday import is_intraday
+from src.trading.simulator import get_clock, run, settings, start, status, step
 
 BANNER = "Paper trading — simulated data, educational only, not financial advice"
 
@@ -66,6 +67,11 @@ def pct(x: float | None) -> str:
     return "–" if x is None else f"{x:.2%}"
 
 
+def market_time(clock: datetime) -> str:
+    """'02 Jan 2024' in daily mode, '02 Jan 2024 · 11:05' during an intraday session."""
+    return f"{clock:%d %b %Y} · {clock:%H:%M}" if is_intraday(clock) else f"{clock:%d %b %Y}"
+
+
 def arrow(x: float) -> str:
     """▲ up, ▼ down, • unchanged: direction is never shown by colour alone."""
     return "▲" if x > 0 else "▼" if x < 0 else "•"
@@ -109,13 +115,24 @@ def require_clock(s: Session) -> datetime:
     return clock
 
 
+@st.fragment(run_every=WATCHLIST_REFRESH_SECONDS)
+def live_clock() -> None:
+    """The market date/time card. A fragment, so it keeps up with a running
+    market without the whole page reloading."""
+    from src.auth import db  # imported here: auth is only needed once the page runs
+
+    with db()() as s:
+        clock = get_clock(s)
+    if clock is not None:
+        st.metric("Market time" if is_intraday(clock) else "Market date", market_time(clock), help=f"{clock:%A}")
+
+
 def market_sidebar(s: Session) -> None:
     """Market date, plus buttons to move the clock if config allows it."""
     clock = get_clock(s)
     with st.sidebar:
         st.subheader("Market")
-        if clock is not None:
-            st.metric("Market date", f"{clock:%d %b %Y}", help=f"{clock:%A}")
+        live_clock()
         if not TRADER_CAN_MOVE_CLOCK:
             return
 
@@ -128,18 +145,24 @@ def market_sidebar(s: Session) -> None:
                 report(start(s, datetime.combine(first, datetime.min.time())), "Market started")
             return
 
-        if st.button("Next day ▶", key="next_day", type="primary", width="stretch"):
+        intraday = settings(s)["intraday"]
+        unit = "step" if intraday else "day"
+        if st.button("Next 5 min ▶" if intraday else "Next day ▶", key="next_day", type="primary", width="stretch"):
             r = step(s)
             if r["status"] == "success":
-                flash("success", f"Moved to {r['data']['to']:%d %b %Y} · {r['data']['fills']} order(s) filled")
+                flash("success", f"Moved to {market_time(r['data']['to'])} · {r['data']['fills']} order(s) filled")
             else:
                 flash("error", r["message"])
-        days = st.number_input("Days", min_value=1, max_value=250, value=5, key="run_days")
-        if st.button(f"Run {days} days ⏩", key="run_many", width="stretch"):
+        days = st.number_input("Steps" if intraday else "Days", min_value=1, max_value=250, value=5, key="run_days")
+        if st.button(f"Run {days} {unit}s ⏩", key="run_many", width="stretch"):
             r = run(s, int(days))["data"]
-            flash("success", f"Ran {r['steps']} day(s) · {r['fills']} order(s) filled")
-        st.caption("Moving the clock closes MIS positions at the day's close and "
-                   "fills waiting orders at the new day's prices.")
+            flash("success", f"Ran {r['steps']} {unit}(s) · {r['fills']} order(s) filled")
+        if intraday:
+            st.caption("Intraday mode: prices move in 5-minute steps from 09:15 to 15:30; "
+                       "MIS positions close automatically at 15:15.")
+        else:
+            st.caption("Moving the clock closes MIS positions at the day's close and "
+                       "fills waiting orders at the new day's prices.")
 
 
 def csv_download(df, label: str, filename: str, key: str) -> None:

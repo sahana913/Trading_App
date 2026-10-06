@@ -21,6 +21,12 @@ Modes (admin "Market control"):
 Auto-advance: when is_running is on, tick() steps once every speed_seconds
 of real time. The admin app calls tick() from a background thread.
 
+Intraday mode (setting "intraday"): instead of jumping a whole day, the clock
+moves 09:15 -> 09:20 -> ... -> 15:30 in 5-minute steps, with prices taken
+from a path inside each real daily candle (intraday.py). MIS positions are
+squared off at 15:15 by match_orders; at 15:30 the next step closes the day
+(snapshot) and opens the next trading day at 09:15.
+
 Note on daily bars: an MIS trade opened on day D is closed at D's close, the
 same price it was bought at, so MIS only becomes interesting with intraday
 data. CNC (delivery) trades span days and work fully.
@@ -44,11 +50,12 @@ from src.db.models import Candle, DailyPnl, Fund, Holding, Order, Position, SimC
 from src.trading.books import portfolio_value
 from src.trading.market import error, success
 from src.trading.matching import match_orders, square_off_mis
+from src.trading.intraday import SESSION_OPEN, day_start, is_intraday, next_tick, session_close
 from src.trading.synthetic import generate_next_day
 
 CLOCK_ID = 1  # the one and only clock row
 MODES = ("replay", "synthetic")
-DEFAULTS = {"mode": "replay", "is_running": False, "speed_seconds": 5.0, "volatility": 1.0}
+DEFAULTS = {"mode": "replay", "is_running": False, "speed_seconds": 5.0, "volatility": 1.0, "intraday": False}
 SPEED_RANGE = (0.5, 60.0)       # real seconds per simulated bar
 VOLATILITY_RANGE = (0.1, 5.0)   # multiplier for synthetic bars
 
@@ -119,8 +126,9 @@ def update_settings(session: Session, **changes) -> dict:
 # ---------------------------------------------------------------------------
 # Changing the clock
 # ---------------------------------------------------------------------------
-def start(session: Session, when: datetime) -> dict:
+def start(session: Session, when: datetime, intraday: bool = False) -> dict:
     """Start a simulation on the first trading day on or after `when`.
+    intraday=True starts at that day's 09:15 open and steps in 5-minute ticks.
 
     Refused if trades already exist: moving the clock back in time would let
     old orders fill at prices from "before" they were placed. Use reset() first.
@@ -131,12 +139,15 @@ def start(session: Session, when: datetime) -> dict:
     if first is None:
         return error(f"No market data on or after {when:%Y-%m-%d}")
 
+    if intraday:
+        first = datetime.combine(first.date(), SESSION_OPEN)  # open of the first day
     clock = session.get(SimClock, CLOCK_ID)
     if clock is None:
         clock = SimClock(id=CLOCK_ID, current_time=first, started_at=first)
         session.add(clock)
     clock.current_time = first
     clock.started_at = first
+    clock.intraday = intraday
     session.commit()
     return success({"current_time": first})
 
@@ -167,12 +178,34 @@ def record_daily_pnl(session: Session, as_of: datetime) -> int:
     return count
 
 
+def _move_clock(session: Session, to: datetime) -> list:
+    """Set the clock and let waiting orders react to the new prices."""
+    session.get(SimClock, CLOCK_ID).current_time = to
+    session.commit()
+    return match_orders(session, as_of=to)
+
+
 def step(session: Session) -> dict:
-    """End the current day and move to the next trading day (see top of file)."""
+    """Move the market forward one step (see top of file):
+    intraday mode mid-session -> 5 minutes; otherwise -> close today, open the next day."""
     now = get_clock(session)
     if now is None:
         return error("Simulation not started. Call start() first")
-    nxt = next_bar_time(session, now)
+    cfg = settings(session)
+
+    # Intraday, still trading: just move 5 minutes
+    if cfg["intraday"] and is_intraday(now) and next_tick(now) is not None:
+        nxt = next_tick(now)
+        fills = _move_clock(session, nxt)
+        return success({"from": now, "to": nxt, "fills": len(fills), "mis_squared_off": 0})
+
+    # Intraday switched OFF mid-session: play the rest of today to the close first
+    if is_intraday(now) and next_tick(now) is not None:
+        _move_clock(session, session_close(now))
+        now = session_close(now)
+
+    # --- End of day: from here on it's the daily logic, keyed on the date ---
+    nxt = next_bar_time(session, day_start(now))
     if nxt is None and settings(session)["mode"] == "synthetic":
         # History has run out: invent the next day (after closing today below)
         nxt = "synthetic"
@@ -185,12 +218,12 @@ def step(session: Session) -> dict:
 
     # 3. Move the clock (creating tomorrow's bars first in synthetic mode)
     if nxt == "synthetic":
-        nxt = generate_next_day(session, now, settings(session)["volatility"])
-    session.get(SimClock, CLOCK_ID).current_time = nxt
-    session.commit()
+        nxt = generate_next_day(session, day_start(now), cfg["volatility"])
+    if cfg["intraday"]:
+        nxt = datetime.combine(nxt.date(), SESSION_OPEN)  # the next day starts at its open
 
     # 4. Let waiting orders see the new prices
-    fills = match_orders(session, as_of=nxt)
+    fills = _move_clock(session, nxt)
     return success({"from": now, "to": nxt, "fills": len(fills), "mis_squared_off": squared_off})
 
 
