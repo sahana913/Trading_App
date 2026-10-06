@@ -8,7 +8,7 @@ How it works: Streamlit runs THIS file on every click. It draws what every
 page shares (style, banner, sidebar), decides which pages the visitor may
 see, then runs the chosen page file from pages/:
     logged out -> only "Log in"
-    logged in  -> Terminal, Orders, Trades, Positions, Holdings, Funds, Analytics
+    logged in  -> Terminal, Orders, Trades, Positions, Holdings, Funds, Analytics, AI Insights
 """
 
 import sys
@@ -44,6 +44,7 @@ else:
         ],
         "Insights": [
             st.Page("pages/analytics.py", title="Analytics", icon=":material/monitoring:"),
+            st.Page("pages/ai_insights.py", title="AI Insights", icon=":material/psychology:"),
         ],
     })
     with db()() as s:

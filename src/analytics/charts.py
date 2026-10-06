@@ -158,3 +158,65 @@ def pnl_calendar_chart(grid: pd.DataFrame) -> go.Figure:
     fig.update_yaxes(autorange="reversed")  # Monday on top, like a calendar
     fig.update_xaxes(tickformat="%d %b", title=None)
     return fig
+
+
+# ---------------------------------------------------------------------------
+# ML charts (AI Insights page)
+# ---------------------------------------------------------------------------
+STRATEGY = "#3987e5"   # the model's strategy (blue)
+BENCHMARK = "#f0a020"  # buy-and-hold (orange): two clearly different hues
+
+
+def feature_importance_chart(importance: pd.Series, top: int = 12) -> go.Figure:
+    """Horizontal bars, most important feature at the top."""
+    s = importance.head(top).iloc[::-1]
+    fig = go.Figure(go.Bar(
+        x=s.to_numpy(), y=s.index, orientation="h", marker=dict(color=STRATEGY, cornerradius=4),
+        hovertemplate="<b>%{y}</b><br>%{x:.1%} of total importance<extra></extra>",
+    ))
+    fig.update_layout(title="What the model relies on (feature importance)",
+                      height=max(260, 60 + 28 * len(s)), margin=dict(l=10, r=10, t=50, b=10),
+                      showlegend=False, xaxis=dict(tickformat=".0%"), hovermode="closest")
+    return fig
+
+
+def model_auc_chart(test_scores: dict, chosen: str) -> go.Figure:
+    """Test ROC-AUC of every model vs the 0.5 'coin flip' line. The chosen
+    model is drawn solid, the others faded."""
+    names = list(test_scores)
+    aucs = [test_scores[n]["roc_auc"] for n in names]
+    fig = go.Figure(go.Bar(
+        x=names, y=aucs, marker=dict(color=[STRATEGY if n == chosen else NEUTRAL for n in names],
+                                     cornerradius=4),
+        text=[f"{a:.3f}" for a in aucs], textposition="outside",
+        hovertemplate="<b>%{x}</b><br>ROC-AUC %{y:.3f}<extra></extra>",
+    ))
+    fig.add_hline(y=0.5, line=dict(color=LOSS, width=1, dash="dash"),
+                  annotation_text="coin flip", annotation_position="right")  # in the margin, clear of bar labels
+    lo = min(0.4, min(aucs) - 0.02)
+    hi = max(0.6, max(aucs) + 0.03)
+    fig.update_layout(title="Test ROC-AUC by model (higher is better)", height=320,
+                      margin=dict(l=10, r=70, t=50, b=10), showlegend=False,
+                      yaxis=dict(range=[lo, hi], tickformat=".2f"), hovermode="closest")
+    return fig
+
+
+def backtest_chart(curves: pd.DataFrame, label: str) -> go.Figure:
+    """Growth of ₹1 over the test period: model strategy vs buy-and-hold."""
+    fig = go.Figure()
+    for col, name, colour in (("strategy", f"Model signal ({label})", STRATEGY),
+                              ("buy_and_hold", "Buy and hold", BENCHMARK)):
+        fig.add_trace(go.Scatter(
+            x=curves["timestamp"], y=curves[col], mode="lines", name=name,
+            line=dict(color=colour, width=2), hovertemplate="%{y:.3f}",
+        ))
+        # Direct label at the end of each line, so colour isn't the only key
+        fig.add_annotation(x=curves["timestamp"].iloc[-1], y=curves[col].iloc[-1],
+                           text=f"{curves[col].iloc[-1] - 1:+.1%}", showarrow=False,
+                           xanchor="left", xshift=6, font=dict(color=colour))
+    fig.add_hline(y=1.0, line=dict(color=NEUTRAL, width=1, dash="dash"))
+    fig.update_layout(title="Backtest on the test period: value of ₹1, after costs", height=380,
+                      margin=dict(l=10, r=50, t=50, b=10), hovermode="x unified",
+                      yaxis=dict(tickformat=".2f"),
+                      legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1))
+    return fig

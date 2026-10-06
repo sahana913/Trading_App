@@ -55,20 +55,35 @@ def summarise(daily: pd.Series) -> dict:
     }
 
 
-def backtest(rows: pd.DataFrame, proba_up: np.ndarray, cost: float | None = None) -> dict:
-    """rows: symbol, timestamp, next_return (the test period). Returns
-    {"strategy": {...}, "buy_and_hold": {...}, "cost_per_side": ...}."""
-    cost = cost_per_side() if cost is None else cost
+def _positions_and_returns(rows: pd.DataFrame, proba_up: np.ndarray, cost: float) -> pd.DataFrame:
+    """Per stock and day: position, strategy return and buy-and-hold return."""
     df = rows[["symbol", "timestamp", "next_return"]].copy()
     df["position"] = (np.asarray(proba_up) > THRESHOLD).astype(float)
     df = df.sort_values(["symbol", "timestamp"])
-
     strat, hold = [], []
     for _, g in df.groupby("symbol"):
         strat.append(daily_strategy_returns(g["next_return"], g["position"], cost))
         hold.append(daily_strategy_returns(g["next_return"], pd.Series(1.0, index=g.index), cost))
     df["strategy"] = pd.concat(strat)
     df["hold"] = pd.concat(hold)
+    return df
+
+
+def equity_curves(rows: pd.DataFrame, proba_up: np.ndarray, cost: float | None = None) -> pd.DataFrame:
+    """Daily equity (starting at 1.0) of the strategy and of buy-and-hold.
+    Columns: timestamp, strategy, buy_and_hold. Equal weight across stocks."""
+    cost = cost_per_side() if cost is None else cost
+    by_day = _positions_and_returns(rows, proba_up, cost).groupby("timestamp")[["strategy", "hold"]].mean()
+    return pd.DataFrame({"timestamp": by_day.index,
+                         "strategy": (1 + by_day["strategy"]).cumprod().to_numpy(),
+                         "buy_and_hold": (1 + by_day["hold"]).cumprod().to_numpy()})
+
+
+def backtest(rows: pd.DataFrame, proba_up: np.ndarray, cost: float | None = None) -> dict:
+    """rows: symbol, timestamp, next_return (the test period). Returns
+    {"strategy": {...}, "buy_and_hold": {...}, "cost_per_side": ...}."""
+    cost = cost_per_side() if cost is None else cost
+    df = _positions_and_returns(rows, proba_up, cost)
 
     # Equal-weight portfolio: average across stocks for each day
     by_day = df.groupby("timestamp")[["strategy", "hold"]].mean()
