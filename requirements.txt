@@ -1,0 +1,8 @@
+# Install with:  .venv\Scripts\python.exe -m pip install -r requirements.txt
+# More packages (streamlit, scikit-learn, lightgbm) will be added in later steps.
+numpy
+pandas
+pyarrow
+plotly
+SQLAlchemy>=2.0
+pytest
