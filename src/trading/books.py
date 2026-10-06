@@ -165,3 +165,25 @@ def funds(session: Session, user_id: int, as_of: datetime | None = None) -> dict
         "m2munrealized": _r(_mis_unrealised(session, user_id, as_of)),
         "utiliseddebits": _r(fund.used_margin),
     })
+
+
+def portfolio_value(session: Session, user_id: int, as_of: datetime | None = None) -> dict:
+    """Everything the user owns, valued at the current price.
+
+    equity = free cash + blocked cash + market value of holdings + unrealised MIS P&L
+    (Blocked cash still belongs to the user; it is just reserved.)
+    """
+    fund = get_fund(session, user_id)
+    holdings_cost = holdings_value = 0.0
+    for h in session.scalars(select(Holding).where(Holding.user_id == user_id)):
+        holdings_cost += h.average_price * h.quantity
+        holdings_value += get_ltp(session, h.instrument_id, as_of) * h.quantity
+    mis_unrealised = _mis_unrealised(session, user_id, as_of)
+    return {
+        "cash": fund.available_cash,
+        "blocked": fund.used_margin,
+        "holdings_value": holdings_value,
+        "realised_pnl": fund.realised_pnl,
+        "unrealised_pnl": (holdings_value - holdings_cost) + mis_unrealised,
+        "equity": fund.available_cash + fund.used_margin + holdings_value + mis_unrealised,
+    }

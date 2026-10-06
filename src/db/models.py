@@ -279,3 +279,18 @@ class ModelRegistry(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)  # the one the app uses
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class SimClock(Base):
+    """The simulated market clock. There is only ever one row (id = 1).
+
+    Every page of the app reads current_time from here, so traders and the
+    admin dashboard always agree on what "today" is.
+    """
+
+    __tablename__ = "sim_clock"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    current_time: Mapped[datetime] = mapped_column(DateTime)  # the bar the market is on
+    started_at: Mapped[datetime] = mapped_column(DateTime)    # first bar of this simulation
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)

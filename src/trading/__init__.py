@@ -5,6 +5,9 @@ The paper-trading engine. Import everything from here:
 
 Every function takes a SQLAlchemy session first. Functions that change data
 commit their own transaction, so each call is all-or-nothing.
+
+The market clock lives in src.trading.simulator (import get_clock from there;
+it is not re-exported here so `python -m src.trading.simulator` runs cleanly).
 """
 
 from src.trading.accounts import create_user
