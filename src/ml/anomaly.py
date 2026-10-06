@@ -114,14 +114,23 @@ def robust_z(df: pd.DataFrame) -> pd.DataFrame:
     return ((df - median) / scale).fillna(0.0)
 
 
+def show(feature: str, value: float) -> str:
+    """Readable value: ₹ for money, % for shares, 2 decimals for counts."""
+    if feature == "avg_trade_value":
+        return f"₹{value:,.0f}"
+    if feature == "trades_per_day":
+        return f"{value:.2f}"
+    return f"{value:.2%}"  # shares and returns
+
+
 def explain(row: pd.Series, z: pd.Series, medians: pd.Series) -> str:
-    """'largest trade vs account is far higher than usual (0.82 vs typical 0.05)'"""
+    """'largest trade vs account is far higher than usual (90.00% vs typical 5.00%)'"""
     feature = z.abs().idxmax()
     direction = "higher" if z[feature] > 0 else "lower"
     if feature == "worst_day":  # more negative = a bigger loss
         direction = "bigger" if z[feature] < 0 else "smaller"
     return (f"{LABELS[feature]} is far {direction} than usual "
-            f"({row[feature]:,.3g} vs typical {medians[feature]:,.3g})")
+            f"({show(feature, row[feature])} vs typical {show(feature, medians[feature])})")
 
 
 def detect_anomalies(behaviour: pd.DataFrame, seed: int = SEED, min_users: int = MIN_USERS,
@@ -154,6 +163,7 @@ def detect_anomalies(behaviour: pd.DataFrame, seed: int = SEED, min_users: int =
     out["flagged_by"] = np.select([by_forest & by_rule, by_forest, by_rule],
                                   ["both", "pattern", "extreme value"], default="")
     medians = out[BEHAVIOUR_FEATURES].median()
-    out["reason"] = [explain(out.loc[i], z.loc[i], medians) for i in out.index]
+    out["reason"] = [explain(out.loc[i], z.loc[i], medians) if out.loc[i, "is_anomaly"]
+                     else "Within the normal range" for i in out.index]
     return (out.sort_values(["is_anomaly", "anomaly_score"], ascending=[False, False])
             .reset_index(drop=True))

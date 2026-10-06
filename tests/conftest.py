@@ -15,6 +15,13 @@ def fast_password_hashing(monkeypatch):
     monkeypatch.setattr(security, "BCRYPT_ROUNDS", 4)
 
 
+@pytest.fixture(autouse=True)
+def no_market_ticker(monkeypatch):
+    """The admin app normally starts a background thread that advances a
+    running market; tests drive the clock themselves."""
+    monkeypatch.setenv("PAPER_TRADING_TICKER", "off")
+
+
 @pytest.fixture
 def raw_candles() -> pd.DataFrame:
     """Small raw dataset: 3 good rows per symbol, all values still as text,

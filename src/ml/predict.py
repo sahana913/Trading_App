@@ -50,11 +50,14 @@ def load_artifact(entry: ModelRegistry) -> dict:
     return _load(str(model_file(entry)))
 
 
-def candles_frame(session: Session, as_of: datetime | None = None) -> pd.DataFrame:
+def candles_frame(session: Session, as_of: datetime | None = None,
+                  include_synthetic: bool = True) -> pd.DataFrame:
     """All candles (optionally up to as_of) as a DataFrame with a symbol column."""
     query = (select(Instrument.symbol, Candle.timestamp, Candle.open, Candle.high, Candle.low,
                     Candle.close, Candle.volume)
              .join(Instrument, Candle.instrument_id == Instrument.id))
+    if not include_synthetic:
+        query = query.where(Candle.is_synthetic.is_not(True))  # real history only
     if as_of is not None:
         query = query.where(Candle.timestamp <= as_of)  # the model must not see the future
     return pd.DataFrame(session.execute(query).all(),

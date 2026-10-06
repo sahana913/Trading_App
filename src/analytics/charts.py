@@ -220,3 +220,48 @@ def backtest_chart(curves: pd.DataFrame, label: str) -> go.Figure:
                       yaxis=dict(tickformat=".2f"),
                       legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1))
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Admin charts
+# ---------------------------------------------------------------------------
+def leaderboard_chart(board: pd.DataFrame, column: str, title: str, fmt: str) -> go.Figure:
+    """Top traders as horizontal bars, best at the top; green/red by sign."""
+    df = board.dropna(subset=[column]).head(10).iloc[::-1]
+    fig = go.Figure(go.Bar(
+        x=df[column], y=df["username"], orientation="h",
+        marker=dict(color=[GAIN if v >= 0 else LOSS for v in df[column]], cornerradius=4),
+        hovertemplate="<b>%{y}</b><br>%{x:" + fmt + "}<extra></extra>",
+    ))
+    fig.update_layout(title=title, height=max(240, 60 + 34 * len(df)), margin=dict(l=10, r=10, t=50, b=10),
+                      showlegend=False, xaxis=dict(tickformat=fmt), hovermode="closest")
+    return fig
+
+
+def bar_over_time(df: pd.DataFrame, column: str, title: str, prefix: str = "") -> go.Figure:
+    """One measure per day as bars (orders, traded value...)."""
+    fig = go.Figure(go.Bar(x=df["date"], y=df[column], marker=dict(color=LINE, cornerradius=3),
+                           hovertemplate=prefix + "%{y:,.0f}<extra></extra>"))
+    return _layout(fig, title, prefix=prefix)
+
+
+def line_over_time(df: pd.DataFrame, column: str, title: str) -> go.Figure:
+    fig = go.Figure(go.Scatter(x=df["date"], y=df[column], mode="lines", line=dict(color=LINE, width=2),
+                               hovertemplate="₹%{y:,.0f}<extra></extra>"))
+    return _layout(fig, title)
+
+
+def model_versions_chart(registry: pd.DataFrame) -> go.Figure:
+    """Validation vs test ROC-AUC for each model version, against 0.5."""
+    df = registry.sort_values("version")
+    labels = [f"v{v}" for v in df["version"]]
+    fig = go.Figure([
+        go.Bar(x=labels, y=df["val_auc"], name="Validation AUC", marker=dict(color=STRATEGY, cornerradius=3)),
+        go.Bar(x=labels, y=df["test_auc"], name="Test AUC", marker=dict(color=BENCHMARK, cornerradius=3)),
+    ])
+    fig.add_hline(y=0.5, line=dict(color=LOSS, width=1, dash="dash"),
+                  annotation_text="coin flip", annotation_position="right")
+    fig.update_layout(title="ROC-AUC by model version", barmode="group", height=320,
+                      margin=dict(l=10, r=70, t=50, b=10), yaxis=dict(range=[0.4, 0.6], tickformat=".2f"),
+                      legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1))
+    return fig

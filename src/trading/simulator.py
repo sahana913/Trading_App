@@ -13,6 +13,14 @@ step() then ends day D and opens the next one:
     3. clock -> next trading day D+1
     4. match_orders(D+1)    waiting LIMIT / SL orders react to D+1's price
 
+Modes (admin "Market control"):
+  replay     step to the next historical bar; stop at the end of the data
+  synthetic  same while history lasts; after the last real bar, invent the
+             next day's bars (synthetic.py) so the market never runs out.
+             Real history is never overwritten.
+Auto-advance: when is_running is on, tick() steps once every speed_seconds
+of real time. The admin app calls tick() from a background thread.
+
 Note on daily bars: an MIS trade opened on day D is closed at D's close, the
 same price it was bought at, so MIS only becomes interesting with intraday
 data. CNC (delivery) trades span days and work fully.
@@ -26,7 +34,7 @@ Command line (PowerShell, from the project root):
 """
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
@@ -36,8 +44,13 @@ from src.db.models import Candle, DailyPnl, Fund, Holding, Order, Position, SimC
 from src.trading.books import portfolio_value
 from src.trading.market import error, success
 from src.trading.matching import match_orders, square_off_mis
+from src.trading.synthetic import generate_next_day
 
 CLOCK_ID = 1  # the one and only clock row
+MODES = ("replay", "synthetic")
+DEFAULTS = {"mode": "replay", "is_running": False, "speed_seconds": 5.0, "volatility": 1.0}
+SPEED_RANGE = (0.5, 60.0)       # real seconds per simulated bar
+VOLATILITY_RANGE = (0.1, 5.0)   # multiplier for synthetic bars
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +81,39 @@ def status(session: Session) -> dict:
         days_left = session.scalar(
             select(func.count(func.distinct(Candle.timestamp))).where(Candle.timestamp > now)
         )
-    return success({"current_time": now, "data_start": first, "data_end": last, "bars_left": days_left})
+    real_end = session.scalar(select(func.max(Candle.timestamp)).where(Candle.is_synthetic.is_not(True)))
+    return success({"current_time": now, "data_start": first, "data_end": last, "real_data_end": real_end,
+                    "bars_left": days_left, **settings(session)})
+
+
+def settings(session: Session) -> dict:
+    """Market-control settings, with defaults for anything not set yet."""
+    clock = session.get(SimClock, CLOCK_ID)
+    values = {k: getattr(clock, k, None) if clock else None for k in DEFAULTS}
+    return {k: DEFAULTS[k] if v is None else v for k, v in values.items()}
+
+
+def update_settings(session: Session, **changes) -> dict:
+    """Change mode / is_running / speed_seconds / volatility (validated).
+    Needs a started simulation (the settings live on the clock row)."""
+    clock = session.get(SimClock, CLOCK_ID)
+    if clock is None:
+        return error("Start the market first")
+    if "mode" in changes and changes["mode"] not in MODES:
+        return error(f"Mode must be one of {MODES}")
+    if "speed_seconds" in changes and not SPEED_RANGE[0] <= changes["speed_seconds"] <= SPEED_RANGE[1]:
+        return error(f"Speed must be {SPEED_RANGE[0]}-{SPEED_RANGE[1]} seconds per bar")
+    if "volatility" in changes and not VOLATILITY_RANGE[0] <= changes["volatility"] <= VOLATILITY_RANGE[1]:
+        return error(f"Volatility must be {VOLATILITY_RANGE[0]}-{VOLATILITY_RANGE[1]}x")
+    unknown = set(changes) - set(DEFAULTS)
+    if unknown:
+        return error(f"Unknown setting(s): {sorted(unknown)}")
+    for key, value in changes.items():
+        setattr(clock, key, value)
+    if changes.get("is_running"):
+        clock.last_tick_at = None  # first automatic step happens straight away
+    session.commit()
+    return success(settings(session))
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +173,9 @@ def step(session: Session) -> dict:
     if now is None:
         return error("Simulation not started. Call start() first")
     nxt = next_bar_time(session, now)
+    if nxt is None and settings(session)["mode"] == "synthetic":
+        # History has run out: invent the next day (after closing today below)
+        nxt = "synthetic"
     if nxt is None:
         return error(f"End of data: {now:%Y-%m-%d} is the last bar")
 
@@ -135,7 +183,9 @@ def step(session: Session) -> dict:
     squared_off = square_off_mis(session, as_of=now)
     record_daily_pnl(session, as_of=now)
 
-    # 3. Move the clock
+    # 3. Move the clock (creating tomorrow's bars first in synthetic mode)
+    if nxt == "synthetic":
+        nxt = generate_next_day(session, now, settings(session)["volatility"])
     session.get(SimClock, CLOCK_ID).current_time = nxt
     session.commit()
 
@@ -156,14 +206,37 @@ def run(session: Session, days: int) -> dict:
     return success({"steps": steps, "fills": fills, "current_time": get_clock(session)})
 
 
+def tick(session: Session, wall_now: datetime | None = None) -> dict | None:
+    """Auto-advance: step once if the market is running and speed_seconds of
+    real time have passed since the last automatic step. Returns the step
+    result, or None if nothing was due. At the end of the data (replay mode)
+    the market is paused automatically."""
+    clock = session.get(SimClock, CLOCK_ID)
+    cfg = settings(session)
+    if clock is None or not cfg["is_running"]:
+        return None
+    wall_now = wall_now or datetime.now()
+    if clock.last_tick_at and wall_now - clock.last_tick_at < timedelta(seconds=cfg["speed_seconds"]):
+        return None  # not due yet
+    result = step(session)
+    clock = session.get(SimClock, CLOCK_ID)
+    clock.last_tick_at = wall_now
+    if result["status"] == "error":
+        clock.is_running = False  # nothing more to replay: pause
+    session.commit()
+    return result
+
+
 def reset(session: Session) -> dict:
     """Wipe ALL trading activity and give every user the starting cash again.
 
-    Users, instruments and candles are kept. This cannot be undone.
+    Users, instruments and REAL candles are kept; synthetic candles are
+    deleted (they belong to the simulation that is being wiped). Cannot be undone.
     """
     # Children before parents, so no foreign key points at a deleted row
     for table in (Trade, Order, Position, Holding, DailyPnl, SimClock):
         session.execute(delete(table))
+    session.execute(delete(Candle).where(Candle.is_synthetic.is_(True)))
     session.execute(update(Fund).values(
         opening_balance=STARTING_CASH, available_cash=STARTING_CASH,
         used_margin=0.0, realised_pnl=0.0,

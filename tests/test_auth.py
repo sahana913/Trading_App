@@ -20,7 +20,7 @@ from src.trading.accounts import create_user
 
 APP_DIR = Path(__file__).resolve().parent.parent / "app"
 TRADER_APP = str(APP_DIR / "trader" / "app.py")
-ADMIN_APP = str(APP_DIR / "admin_app.py")
+ADMIN_APP = str(APP_DIR / "admin" / "admin_app.py")
 
 
 @pytest.fixture
@@ -218,7 +218,7 @@ def test_admin_app_blocks_traders_and_admits_admins(app_db):
     assert "admin accounts only" in at.error[0].value
 
     at = log_in(AppTest.from_file(ADMIN_APP).run(timeout=30), "boss", "password1")
-    assert at.title[0].value == "Admin: boss"
+    assert at.title[0].value == "Overview"
 
 
 def test_disabling_a_user_ends_their_session(app_db):

@@ -151,8 +151,10 @@ def _still_valid(info: dict) -> bool:
         return user is not None and user.is_active and user.role == info["role"]
 
 
-def login_page(title: str, allow_register: bool) -> None:
-    """Draw the login form (and optionally a register tab)."""
+def login_page(title: str, allow_register: bool, on_login=None) -> None:
+    """Draw the login form (and optionally a register tab).
+    on_login(session, user), if given, runs after a successful login (the
+    admin app uses it to write the login to the audit log)."""
     st.title(title)
     tabs = st.tabs(["Log in", "Register"] if allow_register else ["Log in"])
 
@@ -165,6 +167,8 @@ def login_page(title: str, allow_register: bool) -> None:
                 if problem:
                     st.error(problem)
                 else:
+                    if on_login is not None:
+                        on_login(s, user)
                     _remember(user)
                     st.rerun()  # draw the page again, now logged in
 

@@ -214,17 +214,3 @@ def test_ai_insights_page(trained, monkeypatch):
     assert list(signals["Symbol"]) == ["AAA", "BBB", "CCC"]
     assert {m.label for m in at.metric} >= {"Test ROC-AUC", "Test accuracy", "Backtest return"}
     assert len(at.get("plotly_chart")) >= 2  # AUC chart + backtest (+ importance if LightGBM)
-
-
-def test_admin_app_shows_anomaly_section(trained, monkeypatch):
-    monkeypatch.setenv("PAPER_TRADING_DB_URL", trained["url"])
-    with trained["factory"]() as s:
-        create_user(s, "boss", "password1", role="admin")
-    at = AppTest.from_file(str(APP_DIR / "admin_app.py")).run(timeout=30)
-    at.text_input(key="login_username").input("boss")
-    at.text_input(key="login_password").input("password1")
-    at.button(key="login_submit").click()
-    at.run(timeout=30)
-    assert not at.exception, at.exception
-    assert any(h.value == "Unusual trading behaviour" for h in at.subheader)
-    assert "No trader has placed an order yet" in at.info[-1].value

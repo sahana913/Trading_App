@@ -118,6 +118,8 @@ class Candle(Base):
     low: Mapped[float] = mapped_column(Float)
     close: Mapped[float] = mapped_column(Float)
     volume: Mapped[int] = mapped_column(Integer)
+    # True for bars invented by the synthetic market (not real history)
+    is_synthetic: Mapped[bool | None] = mapped_column(Boolean, default=False)
 
 
 # ---------------------------------------------------------------------------
@@ -297,3 +299,11 @@ class SimClock(Base):
     current_time: Mapped[datetime] = mapped_column(DateTime)  # the bar the market is on
     started_at: Mapped[datetime] = mapped_column(DateTime)    # first bar of this simulation
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    # Market control (admin app). Columns may be NULL on databases created
+    # before they existed; the simulator then uses the defaults in brackets.
+    mode: Mapped[str | None] = mapped_column(String(10))                # "replay" | "synthetic"  [replay]
+    is_running: Mapped[bool | None] = mapped_column(Boolean)            # auto-advance on?       [False]
+    speed_seconds: Mapped[float | None] = mapped_column(Float)          # real seconds per bar   [5]
+    volatility: Mapped[float | None] = mapped_column(Float)             # synthetic vol x        [1.0]
+    last_tick_at: Mapped[datetime | None] = mapped_column(DateTime)     # wall-clock time of last auto step
