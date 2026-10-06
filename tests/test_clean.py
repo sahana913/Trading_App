@@ -112,4 +112,19 @@ def test_every_reason_is_reported_even_when_zero(raw_candles):
         "non_positive_price",
         "negative_volume",
         "high_low_inconsistent",
+        "placeholder_bar",
     }
+
+
+def test_drops_placeholder_bars_but_keeps_real_quiet_bars(raw_candles):
+    # Flat price + zero volume: a vendor's "no data" filler -> dropped
+    df = add_row(raw_candles, timestamp="2024-02-01", open="100", high="100",
+                 low="100", close="100", volume="0")
+    # Flat price but real volume: a genuinely quiet bar -> kept
+    df = add_row(df, timestamp="2024-02-02", open="100", high="100",
+                 low="100", close="100", volume="50")
+
+    clean, removed = clean_candles(df)
+
+    assert removed["placeholder_bar"] == 1
+    assert len(clean) == 7

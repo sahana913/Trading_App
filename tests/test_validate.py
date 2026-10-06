@@ -58,6 +58,13 @@ def test_bad_values_fail(clean, column, value, message):
         validate_candles(df)
 
 
+def test_placeholder_bar_fails(clean):
+    df = clean.copy()
+    df.loc[0, ["open", "high", "low", "close", "volume"]] = [50.0, 50.0, 50.0, 50.0, 0]
+    with pytest.raises(DataValidationError, match="placeholder bar"):
+        validate_candles(df)
+
+
 def test_duplicates_fail(clean):
     df = pd.concat([clean.iloc[[0]], clean], ignore_index=True)
     with pytest.raises(DataValidationError, match="duplicate"):

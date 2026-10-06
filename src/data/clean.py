@@ -11,7 +11,8 @@ Cleaning order:
   3. drop rows missing any price; fill missing volume with 0
   4. sort and drop duplicate (symbol, exchange, timestamp) rows
   5. drop invalid OHLC rows (non-positive price, negative volume,
-     high/low not actually the high/low of the bar)
+     high/low not actually the high/low of the bar, and placeholder bars
+     with a flat price and zero volume)
 """
 
 import pandas as pd
@@ -79,6 +80,16 @@ def drop_duplicates(df: pd.DataFrame, removed: dict) -> pd.DataFrame:
     return _drop(df, bad, "duplicate_symbol_timestamp", removed)
 
 
+def is_placeholder_bar(df: pd.DataFrame) -> pd.Series:
+    """True for fake "no trading" bars: open = high = low = close and volume 0.
+
+    Data vendors sometimes insert these on days they have no data for. They
+    look valid but would show a 0% return and leave no volume to trade against.
+    """
+    flat = (df["open"] == df["high"]) & (df["high"] == df["low"]) & (df["low"] == df["close"])
+    return flat & (df["volume"] == 0)
+
+
 def drop_invalid_ohlc(df: pd.DataFrame, removed: dict) -> pd.DataFrame:
     """Remove rows that cannot be a real candle. Each rule is counted separately."""
     df = _drop(df, (df[PRICE_COLUMNS] <= 0).any(axis=1), "non_positive_price", removed)
@@ -88,7 +99,8 @@ def drop_invalid_ohlc(df: pd.DataFrame, removed: dict) -> pd.DataFrame:
     bar_top = df[["open", "close"]].max(axis=1)
     bar_bottom = df[["open", "close"]].min(axis=1)
     bad = (df["high"] < df["low"]) | (df["high"] < bar_top) | (df["low"] > bar_bottom)
-    return _drop(df, bad, "high_low_inconsistent", removed)
+    df = _drop(df, bad, "high_low_inconsistent", removed)
+    return _drop(df, is_placeholder_bar(df), "placeholder_bar", removed)
 
 
 def clean_candles(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:

@@ -5,4 +5,5 @@ pandas
 pyarrow
 plotly
 SQLAlchemy>=2.0
+yfinance
 pytest

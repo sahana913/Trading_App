@@ -9,6 +9,7 @@ so the pipeline stops before saving bad data.
 import pandas as pd
 
 from src.config import CANDLE_COLUMNS, PRICE_COLUMNS
+from src.data.clean import is_placeholder_bar
 
 KEY_COLUMNS = ["symbol", "exchange", "timestamp"]
 
@@ -51,6 +52,7 @@ def validate_candles(df: pd.DataFrame) -> None:
         "high < low": df["high"] < df["low"],
         "high < open or close": df["high"] < df[["open", "close"]].max(axis=1),
         "low > open or close": df["low"] > df[["open", "close"]].min(axis=1),
+        "flat price and zero volume (placeholder bar)": is_placeholder_bar(df),
     }
     for rule, broken in rules.items():
         if broken.any():

@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 
-from src.data.clean import fix_types
+from src.data.clean import fix_types, is_placeholder_bar
 from src.data.load import load_raw_data
 
 # ---------------------------------------------------------------------------
@@ -74,6 +74,7 @@ def find_bad_rows(df: pd.DataFrame) -> pd.DataFrame:
     checks["low_gt_open_or_close"] = df["low"] > df[["open", "close"]].min(axis=1)
     checks["non_positive_price"] = (df[PRICE_COLUMNS] <= 0).any(axis=1)
     checks["negative_volume"] = df["volume"] < 0
+    checks["placeholder_bar"] = is_placeholder_bar(df)  # flat price, zero volume
     return checks
 
 
