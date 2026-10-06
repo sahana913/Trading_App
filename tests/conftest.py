@@ -5,6 +5,15 @@ conftest.py - Shared test data. pytest finds fixtures here automatically.
 import pandas as pd
 import pytest
 
+from src import security
+
+
+@pytest.fixture(autouse=True)
+def fast_password_hashing(monkeypatch):
+    """bcrypt cost 12 takes ~0.25 s per hash; tests use the minimum (4) so the
+    suite stays fast. autouse=True applies this to every test automatically."""
+    monkeypatch.setattr(security, "BCRYPT_ROUNDS", 4)
+
 
 @pytest.fixture
 def raw_candles() -> pd.DataFrame:

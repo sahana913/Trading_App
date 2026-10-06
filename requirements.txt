@@ -6,4 +6,6 @@ pyarrow
 plotly
 SQLAlchemy>=2.0
 yfinance
+bcrypt
+streamlit
 pytest

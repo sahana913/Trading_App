@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
-from src import security
 from src.config import STARTING_CASH
 from src.db.models import Candle, Instrument, Order, Position, Trade, User
 from src.db.session import get_engine, get_session_factory, init_db
@@ -36,12 +35,6 @@ def fee(product, action, qty, price) -> float:
 # ---------------------------------------------------------------------------
 # Fixtures and helpers
 # ---------------------------------------------------------------------------
-@pytest.fixture(autouse=True)
-def fast_password_hashing(monkeypatch):
-    """600,000 hash rounds per user is slow; tests don't need real security."""
-    monkeypatch.setattr(security, "ITERATIONS", 1000)
-
-
 @pytest.fixture
 def session():
     engine = get_engine("sqlite:///:memory:")

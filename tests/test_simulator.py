@@ -10,7 +10,6 @@ from datetime import date, datetime
 import pytest
 from sqlalchemy import func, select
 
-from src import security
 from src.config import STARTING_CASH
 from src.db.models import Candle, DailyPnl, Instrument, Order, Trade
 from src.db.session import get_engine, get_session_factory, init_db
@@ -25,11 +24,6 @@ INFY_CLOSE = {1: 50, 2: 51, 4: 52, 5: 53, 8: 54}  # no bar on the 3rd
 
 def day(d: int) -> datetime:
     return datetime(2024, 1, d)
-
-
-@pytest.fixture(autouse=True)
-def fast_password_hashing(monkeypatch):
-    monkeypatch.setattr(security, "ITERATIONS", 1000)
 
 
 @pytest.fixture
