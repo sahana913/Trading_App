@@ -8,11 +8,12 @@ import pandas as pd
 import streamlit as st
 
 from src import ui
-from src.analytics import charts
+from src.analytics import animated, charts
 from src.auth import db
-from src.config import PROJECT_ROOT
+from src.config import PROJECT_ROOT, SECTORS
 from src.ml.predict import (
-    active_model, backtest_equity_curves, feature_importance, latest_signals, load_artifact,
+    active_model, backtest_equity_curves, candles_frame, explain_signal, feature_importance,
+    latest_signals, load_artifact,
 )
 
 st.title("AI Insights")
@@ -39,6 +40,7 @@ with db()() as s:
         st.stop()
     artifact = load_artifact(entry)
     signals = latest_signals(s, artifact, as_of=clock)
+    candles = candles_frame(s, as_of=clock)  # finished days only, nothing from the future
     # copy what we need while the session is open
     info = {"version": entry.version, "algorithm": entry.algorithm, "id": entry.id, "path": entry.file_path,
             "train_start": entry.train_start, "train_end": entry.train_end, "metrics": entry.metrics}
@@ -66,6 +68,34 @@ st.dataframe(styled, hide_index=True, width="stretch",
              column_config={"Close": st.column_config.NumberColumn(format="₹%.2f"),
                             "P(up)": st.column_config.ProgressColumn(min_value=0.0, max_value=1.0,
                                                                      format="percent")})
+
+# --- Look inside one stock -------------------------------------------------------
+st.subheader("Look inside one stock")
+ready = list(signals.loc[signals["signal"].notna(), "symbol"])
+if ready:
+    symbol = st.selectbox("Stock", ready, key="explain_symbol")
+    left, right = st.columns(2)
+    with left:
+        with db()() as s:
+            explained = explain_signal(s, artifact, symbol, clock)
+        if explained is None:
+            st.info("The active model is a baseline, which has no per-feature reasons to show.")
+        else:
+            table_x, base = explained
+            st.plotly_chart(animated.signal_waterfall(table_x, base, symbol), width="stretch", key="waterfall")
+            st.caption("Starts at the model's average prediction and adds each feature's push "
+                       "(green = towards UP, red = towards DOWN). These are the model's reasons, "
+                       "not proof it is right: its test ROC-AUC is in the section below.")
+    with right:
+        closes = candles[candles["symbol"] == symbol].sort_values("timestamp")
+        if len(closes) > 61:
+            fan, info_fan = animated.forecast_fan(closes, symbol)
+            st.plotly_chart(fan, width="stretch", key="fan")
+            st.caption(f"400 simulated paths at {symbol}'s own recent volatility "
+                       f"({info_fan['sigma']:.2%} a day). 90% of them end between "
+                       f"₹{info_fan['p5']:,.0f} and ₹{info_fan['p95']:,.0f}. Press Play to watch the paths spread out.")
+else:
+    st.info("Signals appear once every stock has 50+ days of history before the market date.")
 
 # --- How good is it? ---------------------------------------------------------
 st.subheader("How good is the model? (test period it never saw)")
@@ -102,6 +132,15 @@ st.plotly_chart(charts.backtest_chart(curves, chosen), width="stretch")
 st.caption(f"Test period {curves['timestamp'].iloc[0]:%d %b %Y} – {curves['timestamp'].iloc[-1]:%d %b %Y}. "
            "Long-only: hold a stock the next day when P(up) > 50%, else cash; equal weight across "
            f"stocks; {bt['cost_per_side']:.2%} cost per buy or sell.")
+
+# --- Who moves together ----------------------------------------------------------
+wide = candles.pivot_table(index="timestamp", columns="symbol", values="close").tail(251)
+if len(wide) >= 30 and wide.shape[1] >= 3:
+    st.plotly_chart(animated.correlation_network(wide.pct_change().dropna(how="all"), SECTORS),
+                    width="stretch", key="network")
+    st.caption(f"Correlation of daily returns over the last {len(wide) - 1} trading days. Lines join stocks that "
+               "tend to move together (thicker = more). A portfolio spread across one cluster is less "
+               "diversified than it looks. Press Play to watch the stocks pull into their clusters.")
 
 card = PROJECT_ROOT / "reports" / "model_card.md"
 if card.exists():

@@ -4,7 +4,7 @@ Every formula is written out at the top of src/analytics/metrics.py."""
 import streamlit as st
 
 from src import ui
-from src.analytics import charts
+from src.analytics import animated, charts
 from src.analytics.metrics import (
     MIN_DAYS_FOR_VAR, calendar_frame, equity_curve, pnl_by_symbol, summary,
 )
@@ -55,7 +55,7 @@ if len(curve) < 2:
 
 # --- Charts ----------------------------------------------------------------
 left, right = st.columns(2)
-left.plotly_chart(charts.equity_chart(curve, start_cash), width="stretch")
+left.plotly_chart(animated.equity_replay(curve, start_cash), width="stretch")
 right.plotly_chart(charts.drawdown_chart(curve), width="stretch")
 st.plotly_chart(charts.pnl_calendar_chart(calendar_frame(curve["date"], curve["day_pnl"])),
                 width="stretch")

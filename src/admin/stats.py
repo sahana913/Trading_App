@@ -77,6 +77,14 @@ def activity_over_time(session: Session) -> pd.DataFrame:
     return out.reset_index(names="date")
 
 
+def equity_history(session: Session) -> pd.DataFrame:
+    """Every trader's end-of-day equity: username, date, equity (for the race)."""
+    rows = session.execute(select(User.username, DailyPnl.trade_date, DailyPnl.equity)
+                           .join(User, DailyPnl.user_id == User.id).where(User.role == "user")
+                           .order_by(DailyPnl.trade_date)).all()
+    return pd.DataFrame(rows, columns=["username", "date", "equity"])
+
+
 def leaderboard(session: Session, as_of: datetime | None) -> pd.DataFrame:
     """Every trader with their results; sort it however the page needs."""
     rows = []

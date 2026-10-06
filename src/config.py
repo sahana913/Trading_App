@@ -54,3 +54,12 @@ TRADER_CAN_MOVE_CLOCK = True
 CHART_BARS = 120  # how many recent candles the price chart shows
 MA_WINDOWS = (20, 50)  # moving averages drawn on the price chart (in bars)
 WATCHLIST_REFRESH_SECONDS = 2
+
+# Sector of each stock, for the market heatmap and the correlation network.
+# Instruments not listed here are shown as "Other".
+SECTORS = {
+    "HDFCBANK": "Banks", "ICICIBANK": "Banks", "SBIN": "Banks",
+    "TCS": "IT", "INFY": "IT",
+    "ITC": "FMCG", "HINDUNILVR": "FMCG",
+    "RELIANCE": "Energy", "BHARTIARTL": "Telecom", "LT": "Infrastructure",
+}

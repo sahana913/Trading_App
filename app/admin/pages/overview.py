@@ -3,8 +3,8 @@
 import streamlit as st
 
 from src import ui
-from src.admin.stats import activity_over_time, overview
-from src.analytics import charts
+from src.admin.stats import activity_over_time, equity_history, overview
+from src.analytics import animated, charts
 from src.auth import db
 from src.trading.simulator import get_clock
 
@@ -14,6 +14,7 @@ with db()() as s:
     clock = get_clock(s)
     o = overview(s, clock)
     history = activity_over_time(s)
+    race = equity_history(s)
 
 st.caption(f"Market date: **{clock:%d %b %Y}**" if clock else "The market hasn't started yet.")
 c = st.columns(3)
@@ -25,6 +26,10 @@ c[0].metric("Traded today", ui.money(o["traded_value_today"]), help="Sum of quan
 c[1].metric("Traded in total", ui.money(o["traded_value_total"]))
 c[2].metric("Platform P&L", ui.money(o["platform_pnl"]),
             help=f"All traders' equity ({ui.money(o['platform_equity'])}) − their opening balances, after charges")
+
+if race["date"].nunique() >= 2:
+    st.plotly_chart(animated.leaderboard_race(race), width="stretch", key="race")
+    st.caption("Each trader's account value at the end of every day. Press Play to watch the ranking change.")
 
 if history.empty:
     st.info("Charts appear once traders start placing orders.")

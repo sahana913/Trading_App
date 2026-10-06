@@ -108,3 +108,77 @@ def backtest_equity_curves(session: Session, artifact: dict) -> pd.DataFrame:
     _, _, test = time_split(rows)
     proba = artifact["model"].predict_proba(test[artifact["features"]])[:, 1]
     return equity_curves(test, proba)
+
+
+# Plain-English names and display formats for the explanation chart
+FEATURE_LABELS = {
+    "ret_1": ("Today's return", "pct"), "ret_2": ("Yesterday's return", "pct"),
+    "ret_3": ("Return 2 days ago", "pct"), "ret_4": ("Return 3 days ago", "pct"),
+    "ret_5": ("Return 4 days ago", "pct"), "ret_5d": ("5-day return", "pct"), "ret_20d": ("20-day return", "pct"),
+    "ma_ratio_5": ("Price vs 5-day average", "pct"), "ma_ratio_10": ("Price vs 10-day average", "pct"),
+    "ma_ratio_20": ("Price vs 20-day average", "pct"), "ma_ratio_50": ("Price vs 50-day average", "pct"),
+    "rsi_14": ("RSI (14)", "num"), "macd": ("MACD", "pct"), "macd_signal": ("MACD signal", "pct"),
+    "macd_hist": ("MACD histogram", "pct"), "bb_position": ("Bollinger position", "num"),
+    "vol_10": ("10-day volatility", "pct"), "vol_20": ("20-day volatility", "pct"),
+    "volume_change": ("Volume change", "pct"), "volume_ratio_20": ("Volume vs 20-day avg", "x"),
+}
+
+
+def explain_signal(session: Session, artifact: dict, symbol: str,
+                   as_of: datetime | None) -> tuple[pd.DataFrame, float] | None:
+    """Why the model gives `symbol` its P(up) right now.
+
+    Returns (table, base) where table has one row per feature, biggest push
+    first: feature, label, value_text, contribution. Contributions are in
+    log-odds and add up exactly:  base + sum(contributions) = log(p / (1 - p)).
+      * LightGBM: TreeSHAP values, built in (predict(..., pred_contrib=True)).
+      * Logistic regression: coefficient x standardised feature value
+        (a linear model's explanation is exact by construction).
+    Baselines learn nothing, so they return None. Also None without enough history.
+    """
+    model = artifact["model"]
+    feats = build_features(candles_frame(session, as_of))
+    row = feats[feats["symbol"] == symbol].tail(1)
+    if row.empty or row[artifact["features"]].isna().any(axis=None):
+        return None
+    X = row[artifact["features"]]
+
+    if isinstance(model, LGBMClassifier):
+        out = model.predict(X, pred_contrib=True)[0]
+        contrib, base = out[:-1], float(out[-1])     # last column = the expected (base) value
+    elif isinstance(model, Pipeline):
+        scaler, logreg = model[0], model[-1]
+        contrib = scaler.transform(X)[0] * logreg.coef_[0]
+        base = float(logreg.intercept_[0])
+    else:
+        return None
+
+    def show(feature: str, value: float) -> str:
+        kind = FEATURE_LABELS.get(feature, (feature, "num"))[1]
+        return f"{value:+.2%}" if kind == "pct" else f"{value:.2f}×" if kind == "x" else f"{value:.2f}"
+
+    table = pd.DataFrame({
+        "feature": artifact["features"],
+        "label": [FEATURE_LABELS.get(f, (f, ""))[0] for f in artifact["features"]],
+        "value_text": [show(f, float(X[f].iloc[0])) for f in artifact["features"]],
+        "contribution": contrib,
+    })
+    order = table["contribution"].abs().sort_values(ascending=False).index
+    return table.loc[order].reset_index(drop=True), base
+
+
+def market_snapshot(session: Session, as_of: datetime | None, sectors: dict) -> pd.DataFrame:
+    """Every active stock right now: symbol, sector, ltp, change_pct (vs the
+    previous close) and turnover (₹ crore traded so far today), for the heatmap."""
+    from src.trading.market import quotes  # local import: market imports nothing from ml
+
+    rows = []
+    for inst in session.scalars(select(Instrument).where(Instrument.is_active).order_by(Instrument.symbol)):
+        q = quotes(session, inst.symbol, inst.exchange, as_of=as_of)
+        if q["status"] != "success":
+            continue
+        q = q["data"]
+        rows.append({"symbol": inst.symbol, "sector": sectors.get(inst.symbol, "Other"), "ltp": q["ltp"],
+                     "change_pct": (q["ltp"] / q["prev_close"] - 1) * 100,
+                     "turnover": max(q["ltp"] * q["volume"] / 1e7, 0.01)})  # ₹ crore; tiny floor keeps every tile visible
+    return pd.DataFrame(rows, columns=["symbol", "sector", "ltp", "change_pct", "turnover"])

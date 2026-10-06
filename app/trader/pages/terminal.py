@@ -12,12 +12,13 @@ import streamlit as st
 from sqlalchemy import select
 
 from src import ui
-from src.analytics import charts
+from src.analytics import animated, charts
 from src.auth import current_user, db
-from src.config import CHART_BARS, MA_WINDOWS, WATCHLIST_REFRESH_SECONDS
+from src.config import CHART_BARS, MA_WINDOWS, SECTORS, WATCHLIST_REFRESH_SECONDS
 from src.db.models import PRICETYPES, Instrument
 from src.trading import history, placeorder, quotes
 from src.trading.accounts import get_fund
+from src.ml.predict import market_snapshot
 from src.trading.simulator import get_clock
 
 user = current_user()
@@ -63,6 +64,15 @@ def watchlist() -> None:
     st.dataframe(styled, hide_index=True, width="stretch", height=38 + 35 * len(table))
 
 
+@st.fragment(run_every=WATCHLIST_REFRESH_SECONDS)
+def live_tape() -> None:
+    with db()() as s:
+        snapshot = market_snapshot(s, get_clock(s), SECTORS)
+    if not snapshot.empty:
+        ui.ticker_tape(snapshot)
+
+
+live_tape()
 col_watch, col_chart, col_order = st.columns([1.35, 2.25, 1.1], gap="medium")
 
 with col_watch:
@@ -72,15 +82,26 @@ with col_watch:
 
 @st.fragment(run_every=WATCHLIST_REFRESH_SECONDS)
 def live_chart() -> None:
-    chart_symbol = st.selectbox("Chart", list(symbols), key="chart_symbol")
-    with db()() as s:
-        bars = pd.DataFrame(history(s, chart_symbol, symbols[chart_symbol], as_of=get_clock(s))["data"])
-    if bars.empty:
-        st.warning(f"No price data for {chart_symbol} yet.")
-    else:
-        # Pass the full history: moving averages need the bars before the visible window
-        st.plotly_chart(charts.price_volume_chart(bars, chart_symbol, MA_WINDOWS, CHART_BARS),
-                        width="stretch", key="price_chart")
+    tab_chart, tab_heat = st.tabs(["Chart", "Market heatmap"])
+    with tab_chart:
+        chart_symbol = st.selectbox("Chart", list(symbols), key="chart_symbol")
+        with db()() as s:
+            bars = pd.DataFrame(history(s, chart_symbol, symbols[chart_symbol], as_of=get_clock(s))["data"])
+        if bars.empty:
+            st.warning(f"No price data for {chart_symbol} yet.")
+        else:
+            # Pass the full history: moving averages need the bars before the visible window
+            st.plotly_chart(charts.price_volume_chart(bars, chart_symbol, MA_WINDOWS, CHART_BARS),
+                            width="stretch", key="price_chart")
+    with tab_heat:
+        with db()() as s:
+            snapshot = market_snapshot(s, get_clock(s), SECTORS)
+        if snapshot.empty:
+            st.info("No prices yet.")
+        else:
+            st.plotly_chart(animated.market_heatmap(snapshot), width="stretch", key="heatmap")
+            st.caption("Grouped by sector. Tile size = money traded today; colour = change since the "
+                       "previous close. Hover a tile for details.")
 
 
 with col_chart:

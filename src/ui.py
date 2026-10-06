@@ -37,6 +37,42 @@ CSS = """
   /* smaller metric numbers so they fit narrow cards without "..." */
   [data-testid="stMetricValue"] { font-size: 1.45rem; }
 
+  /* ---- Motion (all of it switched off when the OS asks for reduced motion) ---- */
+  /* cards lift slightly under the mouse */
+  [data-testid="stMetric"], [data-testid="stPlotlyChart"] {
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  [data-testid="stMetric"]:hover {
+    transform: translateY(-2px); border-color: #3987e5; box-shadow: 0 6px 18px rgba(57, 135, 229, 0.18);
+  }
+
+  /* pulsing LIVE badge while the market is running */
+  .live-badge { display: inline-flex; align-items: center; gap: 0.45rem; font: 600 0.75rem/1 monospace;
+                letter-spacing: 0.08em; color: #22a55a; margin: 0.2rem 0 0.4rem; }
+  .live-badge.paused { color: #8d95a8; }
+  .live-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor;
+              box-shadow: 0 0 0 0 rgba(34, 165, 90, 0.6); animation: pulse 1.6s infinite; }
+  .paused .live-dot { animation: none; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(34, 165, 90, 0.55); }
+                     70% { box-shadow: 0 0 0 9px rgba(34, 165, 90, 0); }
+                     100% { box-shadow: 0 0 0 0 rgba(34, 165, 90, 0); } }
+
+  /* scrolling ticker tape */
+  .tape { overflow: hidden; white-space: nowrap; border: 1px solid #2b2f38; border-radius: 8px;
+          background: #1a1d24; padding: 0.5rem 0; margin-bottom: 0.6rem;
+          -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+                  mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); }
+  .tape-track { display: inline-flex; gap: 2.2rem; padding-left: 1rem; animation: tape linear infinite; }
+  .tape-item { font: 500 0.85rem/1 monospace; color: #e6e6e3; }
+  .tape-item b { letter-spacing: 0.04em; margin-right: 0.4rem; }
+  .tape-up { color: #22a55a; } .tape-down { color: #e34948; }
+  @keyframes tape { to { transform: translateX(-50%); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tape-track, .live-dot { animation: none !important; }
+    [data-testid="stMetric"], [data-testid="stPlotlyChart"] { transition: none; }
+  }
+
   /* digits line up in columns (prices, P&L) */
   [data-testid="stMetricValue"], [data-testid="stDataFrame"] {
     font-variant-numeric: tabular-nums;
@@ -123,7 +159,10 @@ def live_clock() -> None:
 
     with db()() as s:
         clock = get_clock(s)
+        running = settings(s)["is_running"]
     if clock is not None:
+        st.html(f'<div class="live-badge{"" if running else " paused"}"><span class="live-dot"></span>'
+                f'{"LIVE" if running else "PAUSED"}</div>')
         st.metric("Market time" if is_intraday(clock) else "Market date", market_time(clock), help=f"{clock:%A}")
 
 
@@ -163,6 +202,26 @@ def market_sidebar(s: Session) -> None:
         else:
             st.caption("Moving the clock closes MIS positions at the day's close and "
                        "fills waiting orders at the new day's prices.")
+
+
+def ticker_tape(snapshot, seconds: float = 60.0) -> None:
+    """A scrolling strip of prices (symbol, last price, ▲/▼ change).
+
+    The strip is redrawn every few seconds with fresh prices. To stop it
+    jumping back to the start each time, the animation is given a negative
+    delay equal to how far into its loop it should already be, worked out
+    from the wall clock, so the scroll continues smoothly across redraws.
+    """
+    import time
+
+    items = "".join(
+        f'<span class="tape-item"><b>{r.symbol}</b>₹{r.ltp:,.2f} '
+        f'<span class="{"tape-up" if r.change_pct >= 0 else "tape-down"}">'
+        f'{arrow(r.change_pct)} {r.change_pct:+.2f}%</span></span>'
+        for r in snapshot.itertuples())
+    offset = time.time() % seconds  # where in the loop we are right now
+    st.html(f'<div class="tape"><div class="tape-track" style="animation-duration:{seconds}s;'
+            f'animation-delay:-{offset:.2f}s">{items}{items}</div></div>')  # twice, for a seamless loop
 
 
 def csv_download(df, label: str, filename: str, key: str) -> None:
