@@ -7,4 +7,7 @@ __pycache__/
 data/processed/
 db/*.db
 logs/
-reports/
+reports/eda/
+# Trained models are rebuilt by `python -m src.ml.train`; the model card in
+# reports/ IS committed so the results are visible on GitHub
+models/*.joblib

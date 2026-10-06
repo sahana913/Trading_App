@@ -8,4 +8,7 @@ SQLAlchemy>=2.0
 yfinance
 bcrypt
 streamlit
+scikit-learn
+lightgbm
+joblib
 pytest
