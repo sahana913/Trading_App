@@ -45,3 +45,10 @@ MAX_VOLUME_PCT = 0.10
 # MIS positions are closed automatically at/after this time, and no new MIS
 # orders are accepted after it (Indian brokers use about 15:15-15:20).
 SQUARE_OFF_TIME = time(15, 15)
+
+# --- App settings -------------------------------------------------------------
+# Let traders move the shared market clock from the trader app. Handy while
+# you're the only user; switch off once the admin dashboard controls the clock
+# (otherwise one trader's "Next day" moves time for everybody).
+TRADER_CAN_MOVE_CLOCK = True
+CHART_BARS = 120  # how many recent candles the price chart shows

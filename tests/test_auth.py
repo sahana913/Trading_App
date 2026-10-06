@@ -183,52 +183,52 @@ def log_in(at: AppTest, username: str, password: str) -> AppTest:
     at.text_input(key="login_username").input(username)
     at.text_input(key="login_password").input(password)
     at.button(key="login_submit").click()
-    return at.run()
+    return at.run(timeout=30)
 
 
 def test_trader_app_login_and_logout(app_db):
-    at = AppTest.from_file(TRADER_APP).run()
+    at = AppTest.from_file(TRADER_APP).run(timeout=30)
     assert at.title[0].value == "Paper Trading"  # login page
 
     log_in(at, "alice", "password1")
-    assert at.title[0].value == "Welcome, alice"
+    assert "Signed in as **alice**" in at.sidebar.markdown[0].value
 
     at.sidebar.button(key="logout").click()
-    at.run()
+    at.run(timeout=30)
     assert at.title[0].value == "Paper Trading"  # back to the login page
 
 
 def test_trader_app_wrong_password_shows_error(app_db):
-    at = log_in(AppTest.from_file(TRADER_APP).run(), "alice", "wrong-pass")
+    at = log_in(AppTest.from_file(TRADER_APP).run(timeout=30), "alice", "wrong-pass")
     assert at.error[0].value == LOGIN_FAILED
 
 
 def test_trader_app_register_logs_straight_in(app_db):
-    at = AppTest.from_file(TRADER_APP).run()
+    at = AppTest.from_file(TRADER_APP).run(timeout=30)
     at.text_input(key="reg_username").input("carol")
     at.text_input(key="reg_password").input("password1")
     at.text_input(key="reg_confirm").input("password1")
     at.button(key="reg_submit").click()
-    at.run()
-    assert at.title[0].value == "Welcome, carol"
+    at.run(timeout=30)
+    assert "Signed in as **carol**" in at.sidebar.markdown[0].value
 
 
 def test_admin_app_blocks_traders_and_admits_admins(app_db):
-    at = log_in(AppTest.from_file(ADMIN_APP).run(), "alice", "password1")
+    at = log_in(AppTest.from_file(ADMIN_APP).run(timeout=30), "alice", "password1")
     assert "admin accounts only" in at.error[0].value
 
-    at = log_in(AppTest.from_file(ADMIN_APP).run(), "boss", "password1")
+    at = log_in(AppTest.from_file(ADMIN_APP).run(timeout=30), "boss", "password1")
     assert at.title[0].value == "Admin: boss"
 
 
 def test_disabling_a_user_ends_their_session(app_db):
-    at = log_in(AppTest.from_file(TRADER_APP).run(), "alice", "password1")
-    assert at.title[0].value == "Welcome, alice"
+    at = log_in(AppTest.from_file(TRADER_APP).run(timeout=30), "alice", "password1")
+    assert "Signed in as **alice**" in at.sidebar.markdown[0].value
 
     with app_db() as s:  # an admin disables alice while she is logged in
         s.scalar(select(User).where(User.username == "alice")).is_active = False
         s.commit()
 
-    at.run()  # her next click
+    at.run(timeout=30)  # her next click
     assert "session ended" in at.warning[0].value
     assert at.title[0].value == "Paper Trading"

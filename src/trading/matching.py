@@ -103,10 +103,11 @@ def apply_fill(session: Session, order: Order, qty: int, price: float, when: dat
     release_from_order(fund, order, share)
 
     # 2. Move shares and money
+    #    (pnl is None if this fill only opened/added to a position)
     if order.product == "CNC":
-        _fill_cnc(session, order, fund, qty, price)
+        pnl = _fill_cnc(session, order, fund, qty, price)
     else:
-        _fill_mis(session, order, fund, qty, price, when)
+        pnl = _fill_mis(session, order, fund, qty, price, when)
 
     # 3. Pay brokerage and taxes
     fees = calculate_charges(order.product, order.action, qty, price)["total"]
@@ -123,15 +124,16 @@ def apply_fill(session: Session, order: Order, qty: int, price: float, when: dat
     trade = Trade(
         tradeid=new_id(), order_id=order.id, user_id=order.user_id,
         instrument_id=order.instrument_id, action=order.action,
-        quantity=qty, price=price, fees=fees, timestamp=when,
+        quantity=qty, price=price, fees=fees, realised_pnl=pnl, timestamp=when,
     )
     session.add(trade)
     session.flush()
     return trade
 
 
-def _fill_cnc(session: Session, order: Order, fund: Fund, qty: int, price: float) -> None:
-    """Delivery: pay in full for buys; sells come out of holdings."""
+def _fill_cnc(session: Session, order: Order, fund: Fund, qty: int, price: float) -> float | None:
+    """Delivery: pay in full for buys; sells come out of holdings.
+    Returns the realised P&L of a sell, or None for a buy."""
     holding = session.scalar(
         select(Holding).where(Holding.user_id == order.user_id,
                               Holding.instrument_id == order.instrument_id)
@@ -145,6 +147,7 @@ def _fill_cnc(session: Session, order: Order, fund: Fund, qty: int, price: float
         holding.average_price = (holding.average_price * holding.quantity + price * qty) / total
         holding.quantity = total
         fund.available_cash -= qty * price
+        return None
     else:
         # placeorder already checked that enough shares are held
         pnl = (price - holding.average_price) * qty
@@ -153,11 +156,13 @@ def _fill_cnc(session: Session, order: Order, fund: Fund, qty: int, price: float
         fund.realised_pnl += pnl
         if holding.quantity == 0:
             session.delete(holding)  # sold everything
+        return pnl
 
 
 def _fill_mis(session: Session, order: Order, fund: Fund, qty: int, price: float,
-              when: datetime) -> None:
-    """Intraday: first close any opposite exposure, then open new exposure."""
+              when: datetime) -> float | None:
+    """Intraday: first close any opposite exposure, then open new exposure.
+    Returns the realised P&L of the closing part, or None if nothing was closed."""
     pos = session.scalar(
         select(Position).where(Position.user_id == order.user_id,
                                Position.instrument_id == order.instrument_id,
@@ -169,6 +174,7 @@ def _fill_mis(session: Session, order: Order, fund: Fund, qty: int, price: float
         session.add(pos)
     pos.updated_at = when
     sign = 1 if order.action == "BUY" else -1  # +1 adds to longs, -1 adds to shorts
+    pnl = None
 
     # --- a) Closing part: the order goes against the current position ---
     if pos.quantity != 0 and (pos.quantity > 0) != (sign > 0):
@@ -196,6 +202,7 @@ def _fill_mis(session: Session, order: Order, fund: Fund, qty: int, price: float
         pos.margin_used += margin
         fund.used_margin += margin
         fund.available_cash -= margin
+    return pnl
 
 
 # ---------------------------------------------------------------------------

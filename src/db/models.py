@@ -176,6 +176,9 @@ class Trade(Base):
     quantity: Mapped[int] = mapped_column(Integer)
     price: Mapped[float] = mapped_column(Float)
     fees: Mapped[float] = mapped_column(Float, default=0.0)  # brokerage + taxes for this fill
+    # Profit/loss booked by this fill (before fees). None = the fill only opened
+    # or added to a position; a number (even 0) = it closed some shares.
+    realised_pnl: Mapped[float | None] = mapped_column(Float)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     instrument: Mapped[Instrument] = relationship()

@@ -2,7 +2,7 @@
 session.py - Create the database engine, the tables, and sessions.
 """
 
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, create_engine, event, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.config import DB_PATH, DB_URL
@@ -27,8 +27,30 @@ def get_engine(url: str = DB_URL) -> Engine:
 
 
 def init_db(engine: Engine) -> None:
-    """Create any tables that don't exist yet (existing tables are left alone)."""
-    Base.metadata.create_all(engine)
+    """Create missing tables, then add any columns that newer code expects."""
+    Base.metadata.create_all(engine)  # only creates tables that don't exist yet
+    add_missing_columns(engine)
+
+
+def add_missing_columns(engine: Engine) -> list[str]:
+    """A tiny migration tool: if a model has a column the database table
+    lacks (because the code was updated after the database was created),
+    add it with ALTER TABLE. Returns the "table.column" names it added.
+
+    It only ever ADDS nullable columns; it never changes or drops anything.
+    """
+    added = []
+    db_columns = inspect(engine)
+    for table in Base.metadata.sorted_tables:
+        existing = {c["name"] for c in db_columns.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing:
+                continue
+            col_type = column.type.compile(dialect=engine.dialect)  # e.g. FLOAT
+            with engine.begin() as conn:
+                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN "{column.name}" {col_type}'))
+            added.append(f"{table.name}.{column.name}")
+    return added
 
 
 def get_session_factory(engine: Engine) -> sessionmaker[Session]:
