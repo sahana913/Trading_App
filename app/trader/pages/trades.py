@@ -9,7 +9,7 @@ from src.auth import current_user, db
 from src.trading import tradebook
 
 user = current_user()
-st.title("Trades")
+ui.page_header("Trades", "Every fill, with what it cost and what it booked.")
 
 with db()() as s:
     clock = ui.require_clock(s)
@@ -17,7 +17,7 @@ with db()() as s:
     pnl = trades_frame(s, user["id"])  # same fills, with each one's realised P&L
 
 if book.empty:
-    st.info("No trades yet. Orders become trades when they fill.")
+    ui.empty_state("No trades yet", "Orders become trades when they fill. Place one in the Terminal.")
     st.stop()
 
 c = st.columns(4)

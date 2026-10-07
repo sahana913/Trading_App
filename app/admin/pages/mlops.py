@@ -9,7 +9,7 @@ from src.auth import current_user, db
 from src.ml.anomaly import BEHAVIOUR_FEATURES, MIN_USERS, behaviour_frame, detect_anomalies
 
 admin = current_user()
-st.title("ML Ops")
+ui.page_header("ML Ops", "Model versions, retraining, and unusual trading behaviour.")
 
 # --- Registry -----------------------------------------------------------------
 st.subheader("Model registry")
@@ -26,7 +26,7 @@ if c[0].button("Retrain now", key="retrain", type="primary", width="stretch",
     ui.report(result, f"Trained version {result.get('data', {}).get('version')}")
 
 if registry.empty:
-    st.info("No models yet. Press Retrain now (or run `python -m src.ml.train`).")
+    ui.empty_state("No models yet", "Press Retrain now, or run python -m src.ml.train.")
 else:
     with c[1], st.form("activate_form", border=False):
         version = st.selectbox("Version", list(registry["version"]), key="activate_pick",
@@ -55,7 +55,7 @@ with db()() as s:
     flags = detect_anomalies(behaviour_frame(s))
 
 if flags.empty:
-    st.info("No trader has placed an order yet.")
+    ui.empty_state("Nothing to analyse yet", "No trader has placed an order.")
 elif len(flags) < MIN_USERS:
     st.info(f"{len(flags)} active trader(s). The detector needs at least {MIN_USERS} to compare.")
 else:

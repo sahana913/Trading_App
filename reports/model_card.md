@@ -1,9 +1,9 @@
-# Model card: next-day direction (lightgbm, v2)
+# Model card: next-day direction (lightgbm, v3)
 
 > **Educational use only.** Paper trading on historical data. Not financial advice;
 > do not use these signals to trade real money.
 
-Generated 2026-10-06 22:59 by `python -m src.ml.train` (seed 42).
+Generated 2026-10-07 19:12 by `python -m src.ml.train` (seed 42).
 
 ## What it predicts
 For each stock and day *t*: will the next close be higher than today's?
@@ -90,8 +90,8 @@ stocks. Cost 0.111% of the traded value per buy or sell
 | ma_ratio_10 | 4.9% |
 
 ## Selected model
-**lightgbm**, saved to `models/direction_v2_lightgbm.joblib` and recorded in `model_registry`
-(name `direction`, version 2, active).
+**lightgbm**, saved to `models/direction_v3_lightgbm.joblib` and recorded in `model_registry`
+(name `direction`, version 3, active).
 
 ## Honest interpretation
 On the untouched test period the selected model (lightgbm) reached ROC-AUC 0.491 and accuracy 49.7%, while simply predicting the majority class would have scored 49.4%. That is no better than a coin flip (AUC 0.5). It does not clearly beat the simple baselines. Trading the signal returned +0.32% after costs versus +8.28% for buy-and-hold. This is the expected, honest outcome: next-day direction of large, liquid stocks is very close to random, and daily trading costs eat small edges.

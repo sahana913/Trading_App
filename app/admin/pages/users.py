@@ -10,7 +10,7 @@ from src.trading import holdings, orderbook, positionbook, tradebook
 from src.trading.simulator import get_clock
 
 admin = current_user()
-st.title("Users")
+ui.page_header("Users", "Find any account, look at its portfolio, and manage it.")
 
 query = st.text_input("Search by username", key="user_search", placeholder="e.g. ali")
 with db()() as s:
@@ -50,7 +50,7 @@ if row["role"] == "user":
                 ui.report(reset_account(s, admin["id"], uid), f"{chosen} reset to starting cash")
 
 if row["role"] != "user":
-    st.info("Admin accounts don't trade, so there is no portfolio to show.")
+    ui.empty_state("No portfolio", "Admin accounts don't trade, so there is nothing to show here.", mark="A")
     st.stop()
 
 # --- Portfolio -------------------------------------------------------------

@@ -47,7 +47,7 @@ MAX_VOLUME_PCT = 0.10
 SQUARE_OFF_TIME = time(15, 15)
 
 # --- App settings -------------------------------------------------------------
-# Let traders move the shared market clock from the trader app. Handy while
+# Let traders move the shared market clock from the trading pages. Handy while
 # you're the only user; switch off once the admin dashboard controls the clock
 # (otherwise one trader's "Next day" moves time for everybody).
 TRADER_CAN_MOVE_CLOCK = True

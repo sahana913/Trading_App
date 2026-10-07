@@ -8,13 +8,13 @@ from src import ui
 from src.admin.audit import audit_frame
 from src.auth import db
 
-st.title("Audit log")
+ui.page_header("Audit log", "Every admin action, newest first. Rows are only ever added, never edited.")
 
 with db()() as s:
     everything = audit_frame(s)
 
 if everything.empty:
-    st.info("No admin actions recorded yet.")
+    ui.empty_state("No admin actions yet", "Every login and change made in this app will be listed here.")
     st.stop()
 
 choices = ["All actions", *sorted(everything["action"].unique())]

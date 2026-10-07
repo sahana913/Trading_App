@@ -7,7 +7,7 @@ from src.admin.instruments import add_instrument, instruments_frame, remove_inst
 from src.auth import current_user, db
 
 admin = current_user()
-st.title("Instruments")
+ui.page_header("Instruments", "What traders can trade. Instruments with history are deactivated, never deleted.")
 
 with db()() as s:
     table = instruments_frame(s)

@@ -16,7 +16,7 @@ from src.trading.accounts import get_fund
 from src.trading.books import portfolio_value
 
 user = current_user()
-st.title("Funds")
+ui.page_header("Funds", "Where your money is: free, blocked and invested.")
 
 with db()() as s:
     clock = ui.require_clock(s)
@@ -43,5 +43,5 @@ breakdown = pd.DataFrame([
     ("Total P&L (equity − starting cash)", value["equity"] - opening),
     ("of which charges paid", -charges),
 ], columns=["Item", "Amount (₹)"])
-st.dataframe(breakdown, hide_index=True, width="stretch",
-             column_config={"Amount (₹)": st.column_config.NumberColumn(format="localized")})
+st.dataframe(breakdown.style.format({"Amount (₹)": "{:,.2f}"}),  # always 2 decimals: 13,067.20
+             hide_index=True, width="stretch")

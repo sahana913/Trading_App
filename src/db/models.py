@@ -300,7 +300,7 @@ class SimClock(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime)    # first bar of this simulation
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
-    # Market control (admin app). Columns may be NULL on databases created
+    # Market control (admin pages). Columns may be NULL on databases created
     # before they existed; the simulator then uses the defaults in brackets.
     mode: Mapped[str | None] = mapped_column(String(10))                # "replay" | "synthetic"  [replay]
     is_running: Mapped[bool | None] = mapped_column(Boolean)            # auto-advance on?       [False]

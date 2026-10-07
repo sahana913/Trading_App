@@ -8,15 +8,15 @@ from src.analytics import animated, charts
 from src.auth import db
 from src.trading.simulator import get_clock
 
-st.title("Overview")
-
 with db()() as s:
     clock = get_clock(s)
+    chips = ui.market_chips(s) if clock else []
     o = overview(s, clock)
     history = activity_over_time(s)
     race = equity_history(s)
 
-st.caption(f"Market date: **{clock:%d %b %Y}**" if clock else "The market hasn't started yet.")
+ui.page_header("Overview", f"The platform on {ui.market_time(clock)}." if clock else
+               "The platform at a glance. The market hasn't started yet.", chips)
 c = st.columns(3)
 c[0].metric("Traders", o["total_users"], help=f"{o['disabled_users']} disabled")
 c[1].metric("Active today", o["active_today"], help="Traders who placed an order on the market date")
@@ -32,7 +32,7 @@ if race["date"].nunique() >= 2:
     st.caption("Each trader's account value at the end of every day. Press Play to watch the ranking change.")
 
 if history.empty:
-    st.info("Charts appear once traders start placing orders.")
+    ui.empty_state("No activity yet", "Charts appear once traders start placing orders.")
     st.stop()
 
 left, right = st.columns(2)

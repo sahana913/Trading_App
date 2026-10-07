@@ -11,7 +11,7 @@ from src.trading.simulator import SPEED_RANGE, VOLATILITY_RANGE, status
 from src.ui import market_time
 
 admin = current_user()
-st.title("Market control")
+ui.page_header("Market control", "Start, pause and shape the simulated market. Every change is written to the audit log.")
 
 
 @st.fragment(run_every=2)
@@ -19,16 +19,23 @@ def live_status() -> None:
     """Re-reads the clock every 2 s, so you can watch a running market move."""
     with db()() as s:
         info = status(s)["data"]
-    c = st.columns(4)
-    c[0].metric("Market time", market_time(info["current_time"]) if info["current_time"] else "–")
+    now = info["current_time"]
+    c = st.columns(5)  # short values only, so nothing is cut off in the tiles
+    c[0].metric("Market time", f"{now:%H:%M}" if now and info["intraday"] else (f"{now:%d %b}" if now else "–"),
+                help=market_time(now) if now else None)
     c[1].metric("State", "▶ Running" if info["is_running"] else "⏸ Paused")
-    c[2].metric("Mode", info["mode"].capitalize() + (" · intraday" if info["intraday"] else ""))
-    c[3].metric("History left", "–" if info["bars_left"] is None else f"{info['bars_left']} days",
-                help=f"Real data ends {info['real_data_end']:%d %b %Y}" if info["real_data_end"] else None)
+    c[2].metric("Mode", info["mode"].capitalize(), help="replay = real history; synthetic = generated after it ends")
+    c[3].metric("Step", "5 min" if info["intraday"] else "1 day")
+    c[4].metric("History left", "–" if info["bars_left"] is None else f"{info['bars_left']} d",
+                help=f"Days of real data left; it ends {info['real_data_end']:%d %b %Y}" if info["real_data_end"] else None)
 
 
 with db()() as s:
     info = status(s)["data"]
+
+if info["data_start"] is None:  # a fresh database without any prices yet
+    ui.empty_state("No market data loaded", "Run the data pipeline and the seed command, then come back here.")
+    st.stop()
 
 if info["current_time"] is None:
     st.info("The market hasn't started. Choose the first trading day.")
@@ -55,17 +62,18 @@ if info["is_running"]:
             ui.report(market.set_running(s, admin["id"], False), "Market paused")
 else:
     if c[0].button("▶ Start", key="resume", type="primary", width="stretch",
-                   help="Advance one trading day every 'speed' seconds while this admin app is running"):
+                   help="Advance one step every 'speed' seconds while the app is running"):
         with db()() as s:
             ui.report(market.set_running(s, admin["id"], True), "Market running")
-unit = "5-min step" if info["intraday"] else "day"
-if c[1].button(f"Step 1 {unit}", key="step_one", width="stretch"):
+one = "5 min" if info["intraday"] else "1 day"          # what one step means right now
+if c[1].button(f"Step {one}", key="step_one", width="stretch"):
     with db()() as s:
-        ui.report(market.step_once(s, admin["id"], 1), f"Moved forward 1 {unit}")
+        ui.report(market.step_once(s, admin["id"], 1), f"Moved forward {one}")
 days = c[2].number_input("Steps", min_value=1, max_value=250, value=5, key="admin_days", label_visibility="collapsed")
-if c[3].button(f"Step {days} {unit}s", key="step_many", width="stretch"):
+many = f"{days} × 5 min" if info["intraday"] else f"{days} days"
+if c[3].button(f"Step {many}", key="step_many", width="stretch"):
     with db()() as s:
-        ui.report(market.step_once(s, admin["id"], int(days)), f"Moved forward {days} {unit}s")
+        ui.report(market.step_once(s, admin["id"], int(days)), f"Moved forward {many}")
 
 # --- Settings -----------------------------------------------------------------
 st.subheader("Settings")

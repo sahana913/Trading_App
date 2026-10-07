@@ -200,12 +200,12 @@ def test_ai_insights_page(trained, monkeypatch):
     with trained["factory"]() as s:
         create_user(s, "alice", "password1")
         start(s, datetime(2024, 3, 1))
-    at = AppTest.from_file(str(APP_DIR / "trader" / "app.py")).run(timeout=30)
+    at = AppTest.from_file(str(APP_DIR / "main.py")).run(timeout=30)
     at.text_input(key="login_username").input("alice")
     at.text_input(key="login_password").input("password1")
     at.button(key="login_submit").click()
     at.run(timeout=30)
-    at.switch_page("pages/ai_insights.py")
+    at.switch_page("trader/pages/ai_insights.py")
     at.run(timeout=60)
     assert not at.exception, at.exception
     assert at.title[0].value == "AI Insights"

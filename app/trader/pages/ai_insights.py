@@ -16,7 +16,7 @@ from src.ml.predict import (
     latest_signals, load_artifact,
 )
 
-st.title("AI Insights")
+ui.page_header("AI Insights", "What the model predicts, why it says so, and how good it really is.")
 st.warning("**Educational only, not financial advice.** These are experimental signals from a "
            "model trained on past prices. Next-day direction is close to random, and the model's "
            "own test results below show it does not reliably beat simply buying and holding.",
@@ -36,7 +36,7 @@ with db()() as s:
     clock = ui.require_clock(s)
     entry = active_model(s)
     if entry is None:
-        st.info("No model trained yet. Run `.venv\\Scripts\\python.exe -m src.ml.train`.")
+        ui.empty_state("No model trained yet", "Run python -m src.ml.train, or ask an admin to press Retrain on the ML Ops page.")
         st.stop()
     artifact = load_artifact(entry)
     signals = latest_signals(s, artifact, as_of=clock)
@@ -95,7 +95,7 @@ if ready:
                        f"({info_fan['sigma']:.2%} a day). 90% of them end between "
                        f"₹{info_fan['p5']:,.0f} and ₹{info_fan['p95']:,.0f}. Press Play to watch the paths spread out.")
 else:
-    st.info("Signals appear once every stock has 50+ days of history before the market date.")
+    ui.empty_state("Not enough history yet", "Signals appear once each stock has 50+ days of prices before the market date.")
 
 # --- How good is it? ---------------------------------------------------------
 st.subheader("How good is the model? (test period it never saw)")

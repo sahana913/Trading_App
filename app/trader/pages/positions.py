@@ -18,9 +18,8 @@ from src.trading import positionbook
 from src.trading.simulator import get_clock
 
 user = current_user()
-st.title("Positions")
-st.caption("Intraday (MIS) positions. They are closed automatically at 15:15 (intraday mode) or at "
-           "the day's close (daily mode), so they only exist during the day they were opened.")
+ui.page_header("Positions", "Intraday (MIS) positions with live P&L. They close automatically at 15:15 "
+                            "(intraday mode) or at the day's close (daily mode).")
 
 with db()() as s:
     ui.require_clock(s)
@@ -32,7 +31,7 @@ def live_positions() -> None:
         now = get_clock(s)
         rows = positionbook(s, user["id"], as_of=now)["data"]
     if not rows:
-        st.info("No intraday positions. Place an order with product MIS to open one.")
+        ui.empty_state("No intraday positions", "Place an order with product MIS in the Terminal to open one.")
         return
 
     df = pd.DataFrame(rows)

@@ -19,8 +19,8 @@ from src.security import hash_password, needs_rehash, verify_password
 from src.trading.accounts import create_user
 
 APP_DIR = Path(__file__).resolve().parent.parent / "app"
-TRADER_APP = str(APP_DIR / "trader" / "app.py")
-ADMIN_APP = str(APP_DIR / "admin" / "admin_app.py")
+TRADER_APP = str(APP_DIR / "main.py")  # one app for everyone: pages depend on the role
+ADMIN_APP = TRADER_APP
 
 
 @pytest.fixture
@@ -188,14 +188,14 @@ def log_in(at: AppTest, username: str, password: str) -> AppTest:
 
 def test_trader_app_login_and_logout(app_db):
     at = AppTest.from_file(TRADER_APP).run(timeout=30)
-    assert at.title[0].value == "Paper Trading"  # login page
+    assert at.title[0].value == "PaperDesk"  # login page
 
     log_in(at, "alice", "password1")
     assert "Signed in as **alice**" in at.sidebar.markdown[0].value
 
     at.sidebar.button(key="logout").click()
     at.run(timeout=30)
-    assert at.title[0].value == "Paper Trading"  # back to the login page
+    assert at.title[0].value == "PaperDesk"  # back to the login page
 
 
 def test_trader_app_wrong_password_shows_error(app_db):
@@ -213,12 +213,17 @@ def test_trader_app_register_logs_straight_in(app_db):
     assert "Signed in as **carol**" in at.sidebar.markdown[0].value
 
 
-def test_admin_app_blocks_traders_and_admits_admins(app_db):
-    at = log_in(AppTest.from_file(ADMIN_APP).run(timeout=30), "alice", "password1")
-    assert "admin accounts only" in at.error[0].value
+def test_one_app_shows_pages_by_role(app_db):
+    """Same address for everyone; the menu (and which pages exist) follows the role."""
+    at = log_in(AppTest.from_file(TRADER_APP).run(timeout=30), "alice", "password1")
+    assert "Signed in as **alice**" in at.sidebar.markdown[0].value
+    with pytest.raises(ValueError):          # admin pages don't exist for a trader
+        at.switch_page("admin/pages/overview.py")
 
     at = log_in(AppTest.from_file(ADMIN_APP).run(timeout=30), "boss", "password1")
-    assert at.title[0].value == "Overview"
+    assert at.title[0].value == "Overview"   # admins land on the admin overview
+    with pytest.raises(ValueError):          # and trading pages don't exist for an admin
+        at.switch_page("trader/pages/terminal.py")
 
 
 def test_disabling_a_user_ends_their_session(app_db):
@@ -231,4 +236,4 @@ def test_disabling_a_user_ends_their_session(app_db):
 
     at.run(timeout=30)  # her next click
     assert "session ended" in at.warning[0].value
-    assert at.title[0].value == "Paper Trading"
+    assert at.title[0].value == "PaperDesk"

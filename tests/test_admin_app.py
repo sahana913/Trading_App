@@ -13,9 +13,9 @@ from src.db.session import get_engine, get_session_factory, init_db
 from src.trading import create_user, placeorder
 from src.trading.simulator import get_clock, settings, start, step
 
-ADMIN_APP = str(Path(__file__).resolve().parent.parent / "app" / "admin" / "admin_app.py")
-PAGES = ["pages/overview.py", "pages/users.py", "pages/leaderboard.py", "pages/market.py",
-         "pages/instruments.py", "pages/mlops.py", "pages/audit.py"]
+ADMIN_APP = str(Path(__file__).resolve().parent.parent / "app" / "main.py")  # the one PaperDesk app
+PAGES = ["admin/pages/overview.py", "admin/pages/users.py", "admin/pages/leaderboard.py", "admin/pages/market.py",
+         "admin/pages/instruments.py", "admin/pages/mlops.py", "admin/pages/audit.py"]
 FIRST_DAY = datetime(2024, 1, 1)
 
 
@@ -65,16 +65,18 @@ def audit_actions(factory) -> list[str]:
 # ---------------------------------------------------------------------------
 def test_logged_out_visitor_only_has_the_login_page(admin_db):
     at = run(AppTest.from_file(ADMIN_APP))
-    assert at.title[0].value == "Admin Dashboard"
-    assert len(at.tabs) == 0 or [t.label for t in at.tabs] == ["Log in"]  # no Register tab here
+    assert at.title[0].value == "PaperDesk"
+    assert [t.label for t in at.tabs] == ["Log in", "Register"]  # one login page for everyone
     for page in PAGES:  # admin pages are not even registered
         with pytest.raises(ValueError):
             at.switch_page(page)
 
 
 def test_trader_is_blocked(admin_db):
+    """A trader logs in fine, but only gets the trading pages: admin pages
+    are not registered for them, so they can't be opened at all."""
     at = log_in("alice")
-    assert "admin accounts only" in at.error[0].value
+    assert not at.error
     assert not any(t.value == "Overview" for t in at.title)
     for page in PAGES:
         with pytest.raises(ValueError):
@@ -98,7 +100,7 @@ def test_admin_demoted_mid_session_is_logged_out(admin_db):
         s.commit()
     at = run(at)
     assert "session ended" in at.warning[0].value
-    assert at.title[0].value == "Admin Dashboard"  # back to the login page
+    assert at.title[0].value == "PaperDesk"  # back to the login page
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +127,7 @@ def test_every_page_renders_with_activity(admin_db, page):
 
 def test_disable_user_from_the_users_page(admin_db):
     at = log_in("boss")
-    at.switch_page("pages/users.py")
+    at.switch_page("admin/pages/users.py")
     at = run(at)
     at.selectbox(key="user_pick").set_value("carol")
     at = run(at)
@@ -138,7 +140,7 @@ def test_disable_user_from_the_users_page(admin_db):
 
 def test_start_market_and_change_settings_from_the_market_page(admin_db):
     at = log_in("boss")
-    at.switch_page("pages/market.py")
+    at.switch_page("admin/pages/market.py")
     at = run(at)
     at.button(key="admin_start").click()
     at = run(at)

@@ -1,5 +1,5 @@
 """
-Admin actions, as plain functions the admin app calls (and tests can call).
+Admin actions, as plain functions the admin pages call (and tests can call).
 
 Two rules every function that CHANGES something follows:
   1. require_admin() first: the caller must be an active admin, otherwise

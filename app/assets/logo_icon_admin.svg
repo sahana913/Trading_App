@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- PaperDesk Admin mark (violet), shown when the sidebar is collapsed and as the tab icon -->
+  <rect x="0" y="0" width="32" height="32" rx="8" fill="#9b8cf2"/>
+  <rect x="6" y="11" width="5" height="12" rx="1.5" fill="#15112b"/>
+  <rect x="13.5" y="6" width="5" height="20" rx="1.5" fill="#15112b"/>
+  <rect x="21" y="14" width="5" height="8" rx="1.5" fill="#15112b"/>
+</svg>

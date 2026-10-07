@@ -18,7 +18,7 @@ from plotly.subplots import make_subplots
 
 GAIN = "#22a55a"     # green
 LOSS = "#e34948"     # red
-LINE = "#3987e5"     # single-series line colour (blue, readable on dark)
+LINE = "#4c8ee6"     # single-series line colour: the PaperDesk data blue
 NEUTRAL = "#8a8984"  # reference lines (e.g. starting cash)
 MA_COLOURS = ["#f0a020", "#b48cf2", "#3fc1c9"]  # moving-average lines, in order
 
@@ -113,7 +113,7 @@ def price_volume_chart(bars: pd.DataFrame, symbol: str, ma_windows: tuple[int, .
     ), row=1, col=1)
     for w, colour in zip(ma_windows, MA_COLOURS):
         fig.add_trace(go.Scatter(
-            x=bars["timestamp"], y=bars[f"MA{w}"], mode="lines", name=f"{w}-day average",
+            x=bars["timestamp"], y=bars[f"MA{w}"], mode="lines", name=f"MA{w}",  # short, so the legend stays on one line
             line=dict(color=colour, width=1.5), hovertemplate="₹%{y:,.2f}",
         ), row=1, col=1)
     fig.add_trace(go.Bar(

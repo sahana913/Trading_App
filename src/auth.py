@@ -1,5 +1,5 @@
 """
-auth.py - Register, log in, log out and role checks for both Streamlit apps.
+auth.py - Register, log in, log out and role checks for the PaperDesk app.
 
 Two layers:
   1. Plain functions (register_user, authenticate, has_role) that only need a
@@ -12,8 +12,8 @@ Single-page app: one line at the top:
 If nobody is logged in, the login form is shown and the rest of the page is
 not run (st.stop()). Otherwise `user` is {"id", "username", "role"}.
 
-Multipage app (app/trader/app.py): call session_user() and offer only the
-login page while it returns None.
+Multipage app (app/main.py): call session_user(), offer only the login page
+while it returns None, and build the menu from the user's role.
 """
 
 import os
@@ -104,7 +104,7 @@ def has_role(user_role: str, required: str) -> bool:
     """True if the user's role matches the page's required role.
 
     Roles are kept separate on purpose: admins manage the platform from the
-    admin app and don't trade in the trader app.
+    admin pages and don't trade on the trading pages.
     """
     if required not in ROLES:
         raise ValueError(f"Unknown role '{required}'")
@@ -154,7 +154,7 @@ def _still_valid(info: dict) -> bool:
 def login_page(title: str, allow_register: bool, on_login=None) -> None:
     """Draw the login form (and optionally a register tab).
     on_login(session, user), if given, runs after a successful login (the
-    admin app uses it to write the login to the audit log)."""
+    login page uses it to write admin logins to the audit log)."""
     st.title(title)
     tabs = st.tabs(["Log in", "Register"] if allow_register else ["Log in"])
 
@@ -200,7 +200,7 @@ def session_user() -> dict | None:
 def block_wrong_role(info: dict, role: str) -> None:
     """Stop the page if the user's role doesn't match (with a way to log out)."""
     if not has_role(info["role"], role):
-        st.error(f"This app is for {role} accounts only. You are logged in as a {info['role']}.")
+        st.error(f"This page is for {role} accounts only. You are logged in as a {info['role']}.")
         st.button("Log out", on_click=logout, key="wrong_role_logout")
         st.stop()
 

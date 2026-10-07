@@ -2,18 +2,19 @@
 
 import streamlit as st
 
+from src import ui
 from src.admin.stats import leaderboard
 from src.analytics import charts
 from src.auth import db
 from src.trading.simulator import get_clock
 
-st.title("Leaderboard")
+ui.page_header("Leaderboard", "Who is doing best: by money made, or by return per unit of risk.")
 
 with db()() as s:
     board = leaderboard(s, get_clock(s))
 
 if board.empty:
-    st.info("No traders yet.")
+    ui.empty_state("No traders yet", "Traders appear here once they register.")
     st.stop()
 
 by = st.radio("Rank by", ["Total P&L", "Sharpe ratio"], horizontal=True, key="rank_by",

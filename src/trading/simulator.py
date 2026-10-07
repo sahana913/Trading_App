@@ -19,7 +19,7 @@ Modes (admin "Market control"):
              next day's bars (synthetic.py) so the market never runs out.
              Real history is never overwritten.
 Auto-advance: when is_running is on, tick() steps once every speed_seconds
-of real time. The admin app calls tick() from a background thread.
+of real time. The app calls tick() from a background thread (src/admin/ticker.py).
 
 Intraday mode (setting "intraday"): instead of jumping a whole day, the clock
 moves 09:15 -> 09:20 -> ... -> 15:30 in 5-minute steps, with prices taken

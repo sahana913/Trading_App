@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="184" height="36" viewBox="0 0 184 36">
+  <!-- PaperDesk wordmark: an amber tile with three candles, then the name -->
+  <rect x="0" y="2" width="32" height="32" rx="8" fill="#f2a93b"/>
+  <rect x="6" y="13" width="5" height="12" rx="1.5" fill="#1a1205"/>
+  <rect x="13.5" y="8" width="5" height="20" rx="1.5" fill="#1a1205"/>
+  <rect x="21" y="16" width="5" height="8" rx="1.5" fill="#1a1205"/>
+  <text x="42" y="25" font-family="'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif" font-size="21" font-weight="800"
+        letter-spacing="0.2" fill="#e8ebf2">Paper<tspan fill="#f2a93b">Desk</tspan></text>
+</svg>

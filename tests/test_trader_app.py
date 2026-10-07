@@ -18,7 +18,7 @@ from src.trading.accounts import create_user
 from src.trading.simulator import get_clock
 from src.ui import BANNER
 
-TRADER_APP = str(Path(__file__).resolve().parent.parent / "app" / "trader" / "app.py")
+TRADER_APP = str(Path(__file__).resolve().parent.parent / "app" / "main.py")  # the one PaperDesk app
 FIRST_DAY = datetime(2024, 1, 1)
 
 
@@ -52,7 +52,7 @@ def run(at: AppTest) -> AppTest:
 
 def banner_shown(at: AppTest) -> bool:
     """Note: after at.switch_page(), AppTest only reports the page file's own
-    elements, not those drawn by app.py, so we check the banner on pages
+    elements, not those drawn by main.py, so we check the banner on pages
     reached without switching. (Checked in a real browser: it shows on all.)"""
     return any(BANNER in h.proto.body for h in at.get("html"))
 
@@ -93,7 +93,7 @@ def orders_in_db(factory) -> list[Order]:
 # ---------------------------------------------------------------------------
 def test_logged_out_visitor_sees_only_login_with_banner(app_db):
     at = run(AppTest.from_file(TRADER_APP))
-    assert at.title[0].value == "Paper Trading"
+    assert at.title[0].value == "PaperDesk"
     assert at.text_input(key="login_username") is not None
     assert banner_shown(at)
 
@@ -116,7 +116,7 @@ def test_watchlist_shows_prices_and_direction(app_db):
     at = run(at)
     table = at.dataframe[0].value  # the watchlist (a Styler's underlying data)
     assert list(table["Symbol"]) == ["INFY", "TCS"]
-    assert table.set_index("Symbol").loc["TCS", "LTP"] == 3510
+    assert table.set_index("Symbol").loc["TCS", "LTP (₹)"] == 3510
     assert table.set_index("Symbol").loc["TCS", "Change %"] == pytest.approx(10 / 3500 * 100)
 
 
@@ -143,12 +143,12 @@ def test_cancel_on_the_orders_page(app_db):
     at = submit_order(started_app(), qty=5, pricetype="LIMIT", price=3000.0)
     assert orders_in_db(app_db)[0].status == "open"
 
-    at.switch_page("pages/orders.py")
+    at.switch_page("trader/pages/orders.py")
     at = run(at)
     assert at.title[0].value == "Orders"
     at.button(key="cancel_order").click()
     at = run(at)
-    # (The "Order ... cancelled" message is drawn by app.py, which AppTest
+    # (The "Order ... cancelled" message is drawn by main.py, which AppTest
     # doesn't report after switch_page; see banner_shown.)
     assert orders_in_db(app_db)[0].status == "cancelled"
 
@@ -168,12 +168,12 @@ def test_next_day_fills_a_waiting_order(app_db):
 
 
 @pytest.mark.parametrize("page, title, metric", [
-    ("pages/trades.py", "Trades", "Turnover"),
-    ("pages/positions.py", "Positions", "Unrealised P&L"),
-    ("pages/holdings.py", "Holdings", "Current value"),
-    ("pages/funds.py", "Funds", "Available cash"),
-    ("pages/analytics.py", "Analytics", "Profit factor"),
-    ("pages/analytics.py", "Analytics", "VaR 95% (1 day)"),
+    ("trader/pages/trades.py", "Trades", "Turnover"),
+    ("trader/pages/positions.py", "Positions", "Unrealised P&L"),
+    ("trader/pages/holdings.py", "Holdings", "Current value"),
+    ("trader/pages/funds.py", "Funds", "Available cash"),
+    ("trader/pages/analytics.py", "Analytics", "Profit factor"),
+    ("trader/pages/analytics.py", "Analytics", "VaR 95% (1 day)"),
 ])
 def test_other_pages_render_after_trading(app_db, page, title, metric):
     at = submit_order(started_app(), qty=10)                       # CNC holding
@@ -188,8 +188,8 @@ def test_other_pages_render_after_trading(app_db, page, title, metric):
     assert metric in [m.label for m in at.metric]
 
 
-@pytest.mark.parametrize("page, key", [("pages/orders.py", "orders_csv"),
-                                       ("pages/trades.py", "trades_csv")])
+@pytest.mark.parametrize("page, key", [("trader/pages/orders.py", "orders_csv"),
+                                       ("trader/pages/trades.py", "trades_csv")])
 def test_csv_downloads(app_db, page, key):
     at = submit_order(started_app(), qty=10)
     at.switch_page(page)
@@ -205,4 +205,4 @@ def test_disabled_trader_is_logged_out(app_db):
         s.commit()
     at = run(at)
     assert "session ended" in at.warning[0].value
-    assert at.title[0].value == "Paper Trading"  # back on the login page
+    assert at.title[0].value == "PaperDesk"  # back on the login page

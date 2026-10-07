@@ -1,4 +1,4 @@
-# Paper Trading & Portfolio Analytics Platform
+# PaperDesk: Paper Trading & Portfolio Analytics Platform
 
 An educational, OpenAlgo-style paper-trading platform written entirely in Python.
 Traders get virtual cash, place orders against replayed NSE market data, and see
@@ -16,8 +16,21 @@ records every admin action.
 | Trader terminal | Analytics |
 |---|---|
 | ![Trading terminal](docs/screenshots/trader_terminal.png) | ![Analytics dashboard](docs/screenshots/trader_analytics.png) |
-| **AI Insights** | **Admin overview** |
-| ![AI Insights page](docs/screenshots/trader_ai_insights.png) | ![Admin overview](docs/screenshots/admin_overview.png) |
+| **AI Insights** | **Admin pages: market control** |
+| ![AI Insights page](docs/screenshots/trader_ai_insights.png) | ![Admin market control](docs/screenshots/admin_market_control.png) |
+| **Login** | |
+| ![Login screen](docs/screenshots/login.png) | |
+
+**One app for everyone.** Traders and admins use the same address (http://localhost:8501)
+and the same login page, which also has **Register**. After login, the menu shows the pages
+for your role: trading pages for traders, admin pages for admins.
+
+**Design ("Night Desk").** Saffron amber marks the trading pages' brand and main actions,
+violet marks the admin pages, blue is for data, and green/red appear only when money moves.
+Headings and text use Plus Jakarta Sans, and numbers use JetBrains Mono so columns of
+prices line up. All of it is Streamlit: the theme lives in `.streamlit/config.toml` and the
+shared components (page header, market card, account card, empty states, order-ticket
+styling) in `src/ui.py`.
 
 ---
 
@@ -39,7 +52,7 @@ records every admin action.
 
 ## Features
 
-### Trader app (port 8501)
+### Trading pages (for traders)
 - **Login and registration** with bcrypt-hashed passwords, roles (trader / admin) and
   disabled accounts. Every new trader starts with **₹10,00,000** of virtual cash.
 - **Trading terminal**: live-refreshing watchlist (▲/▼ change), candlestick chart with
@@ -61,7 +74,7 @@ records every admin action.
   only from prices up to the market date), its test metrics against baselines, feature
   importance, and its backtest against buy-and-hold.
 
-### Admin app (port 8502, admin accounts only)
+### Admin pages (for admin accounts, same app)
 - **Overview**: traders, active today, orders and traded value, platform P&L, charts over time.
 - **Users**: search, view any trader's portfolio and trades, top up, reset, enable/disable.
 - **Leaderboard** by total P&L or Sharpe ratio.
@@ -92,8 +105,9 @@ funds(session, user_id)["data"]["availablecash"]
 ```mermaid
 flowchart LR
     subgraph Browser
-        T["Trader app :8501<br/>app/trader"]
-        A["Admin app :8502<br/>app/admin"]
+        L["Log in / Register<br/>app/login.py"]
+        T["Trading pages<br/>app/trader/pages"]
+        A["Admin pages<br/>app/admin/pages"]
     end
     subgraph Core["Python package: src/"]
         AUTH["auth.py + security.py<br/>bcrypt login, roles"]
@@ -107,8 +121,9 @@ flowchart LR
     DB[("SQLite<br/>db/paper_trading.db")]
     FILES[("candles.parquet<br/>models/*.joblib")]
 
-    T --> AUTH & ENG & AN & ML
-    A --> AUTH & ADM
+    L --> AUTH
+    T --> ENG & AN & ML
+    A --> ADM
     ADM --> SIM & ML
     TICK --> SIM
     SIM --> ENG
@@ -117,13 +132,15 @@ flowchart LR
 ```
 
 **Key ideas**
-- **One simulated clock** (`sim_clock` table) shared by every page and both apps. Every
+- **One app, menus by role** (`app/main.py`): a single address and login. The menu is
+  built from the logged-in role, so a trader's session simply has no admin pages.
+- **One simulated clock** (`sim_clock` table) shared by every page and every user. Every
   price lookup is "latest candle at or before now", so the apps and the ML signals can
   never see the future. Mid-session (intraday mode), today's daily candle is replaced by
   the part of the day that has happened so far, and the ML model only sees finished days.
 - **Thin UI, testable core**: the Streamlit pages only draw; all rules live in `src/`
   as plain functions that the tests call directly.
-- **Defence in depth for admin actions**: the admin app only registers its pages for
+- **Defence in depth for admin actions**: the app only registers admin pages for
   admins, *and* every function in `src/admin/` re-checks the caller's role (raising
   `PermissionError`) and writes an `admin_log` row in the same transaction as the change.
 
@@ -261,27 +278,25 @@ Remove-Item Env:ADMIN_PASSWORD
 
 ## Running
 
-**Everything at once** (opens three windows: simulator, trader app, admin app):
+Start PaperDesk (one window):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
-Then open **http://localhost:8501** (trader: register a new account) and
-**http://localhost:8502** (admin: log in as `admin`). In the admin app, go to
-**Market control**, choose a start date and press **Start market**, then **▶ Start**
-to let the market advance on its own (or step it a day at a time).
-
-**Or one at a time:**
+or, without the script:
 
 ```powershell
-.venv\Scripts\python.exe -m streamlit run app/trader/app.py --server.port 8501
-.venv\Scripts\python.exe -m streamlit run app/admin/admin_app.py --server.port 8502
+.venv\Scripts\python.exe -m streamlit run app/main.py
 ```
 
-When the admin app runs on its own it advances the market itself; `run.ps1` instead
-runs a separate simulator window (`python -m src.admin.ticker`) and switches the admin
-app's own heartbeat off, so the market is never advanced twice.
+Then open **http://localhost:8501**:
+- **Traders:** open the **Register** tab to create an account (₹10,00,000 of virtual cash), or log in.
+- **Admins:** log in as `admin` (the password you chose for the seed command). The admin
+  pages open in violet. Go to **Market control**, choose a start date and press
+  **Start market**, then **▶ Start** to let the market advance on its own.
+
+The market heartbeat runs inside the app, so the market advances while the app is running.
 
 **Command-line market control** (no UI needed):
 
@@ -317,8 +332,9 @@ app's own heartbeat off, so the market is never advanced twice.
 
 ```
 app/
-  trader/app.py, pages/      Trader app (Terminal, Orders, Trades, Positions, Holdings, Funds, Analytics, AI Insights)
-  admin/admin_app.py, pages/ Admin app (Overview, Users, Leaderboard, Market control, Instruments, ML Ops, Audit log)
+  main.py, login.py          The one PaperDesk app: login/register, then a menu built from your role
+  trader/pages/              Trading pages (Terminal, Orders, Trades, Positions, Holdings, Funds, Analytics, AI Insights)
+  admin/pages/               Admin pages (Overview, Users, Leaderboard, Market control, Instruments, ML Ops, Audit log)
 src/
   data/       download, load, clean, validate, pipeline
   db/         SQLAlchemy models, session (with a small column migration helper), seed
@@ -329,7 +345,7 @@ src/
   auth.py, security.py, ui.py, config.py
 tests/        pytest suite
 eda.py        exploratory data analysis
-run.ps1       start simulator + both apps
+run.ps1       start PaperDesk (one app on :8501)
 reports/      model_card.md (committed), eda/ (generated)
 docs/         screenshots
 ```
@@ -361,7 +377,7 @@ a different database (the tests use it).
   Sharpe and VaR over a few weeks are unreliable.
 - **Top-ups count as capital**, so total P&L is right but the daily P&L chart shows the
   top-up day as a jump.
-- **Auto-advance needs a running process** (the admin app or `run.ps1`'s simulator window).
+- **Auto-advance needs the app running** (the market heartbeat lives inside it).
 - SQLite suits a single machine and a handful of users, not production load.
 
 ---

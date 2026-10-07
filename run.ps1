@@ -1,13 +1,14 @@
 <#
-run.ps1 - Start the whole platform, each part in its own PowerShell window:
-    1. the market simulator (the heartbeat that advances a running market)
-    2. the trader app   -> http://localhost:8501
-    3. the admin app    -> http://localhost:8502
+run.ps1 - Start PaperDesk: one app, one address, for traders and admins.
+    http://localhost:8501   log in or register; the pages you get depend on your role
+
+The market heartbeat (which advances a running market) runs inside the app,
+so this is the only window you need.
 
 Usage, from the project folder:
     powershell -ExecutionPolicy Bypass -File .\run.ps1
 
-To stop: close the three windows (or press Ctrl+C in each).
+To stop: close the window (or press Ctrl+C in it).
 First time? Do the setup steps in README.md first (venv, data, database).
 #>
 
@@ -27,21 +28,19 @@ if (-not (Test-Path $database)) {
     Write-Host "Build it first (see README.md): download -> pipeline -> seed."
     exit 1
 }
-
-# --- Start each part in a new window -------------------------------------------
-function Start-Part([string]$title, [string]$command) {
-    # -NoExit keeps the window open so you can read its log; the title tells the windows apart
-    $full = "`$Host.UI.RawUI.WindowTitle = '$title'; Set-Location '$root'; $command"
-    Start-Process powershell -ArgumentList @("-NoExit", "-Command", $full) | Out-Null
-    Write-Host "Started: $title"
+$busy = Get-NetTCPConnection -State Listen -LocalPort 8501 -ErrorAction SilentlyContinue
+if ($busy) {
+    Write-Host "Port 8501 is already in use: PaperDesk (or another app) is still running." -ForegroundColor Yellow
+    Write-Host "Close that window first (or press Ctrl+C in it), then run this script again."
+    exit 1
 }
 
-Start-Part "Simulator" "& '$python' -m src.admin.ticker"
-Start-Part "Trader app (8501)" "& '$python' -m streamlit run app/trader/app.py --server.port 8501"
-# The simulator window already advances the market, so the admin app's own heartbeat is turned off
-Start-Part "Admin app (8502)" "`$env:PAPER_TRADING_TICKER = 'off'; & '$python' -m streamlit run app/admin/admin_app.py --server.port 8502"
+# --- Start the app in its own window -----------------------------------------
+# --server.folderWatchList: Streamlit only reloads code inside app/; watching src/ too means
+# an edit to shared code (src/ui.py, the engine...) is picked up without a restart.
+$command = "`$Host.UI.RawUI.WindowTitle = 'PaperDesk (8501)'; Set-Location '$root'; " +
+           "& '$python' -m streamlit run app/main.py --server.port 8501 --server.folderWatchList '$root\src'"
+Start-Process powershell -ArgumentList @("-NoExit", "-Command", $command) | Out-Null
 
-Write-Host ""
-Write-Host "Trader app: http://localhost:8501" -ForegroundColor Green
-Write-Host "Admin app:  http://localhost:8502" -ForegroundColor Green
-Write-Host "Start or pause the market in the admin app under Market control."
+Write-Host "Started PaperDesk: http://localhost:8501" -ForegroundColor Green
+Write-Host "Traders: log in or register. Admins: log in with an admin account to get the admin pages."

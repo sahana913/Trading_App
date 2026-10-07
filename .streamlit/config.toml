@@ -1,5 +1,10 @@
 # Streamlit settings, read automatically when you run `streamlit run` from the
 # project root. The admin app overrides the port on its command line.
+#
+# PaperDesk "Night Desk" theme: saffron amber for the brand and main actions,
+# blue for data, green/red only for money moving. Fonts load from Google Fonts:
+#   text and headings  Plus Jakarta Sans  (clean and modern, easy to read)
+#   numbers            JetBrains Mono     (code font; prices and P&L line up in columns)
 
 [server]
 port = 8501
@@ -9,8 +14,19 @@ gatherUsageStats = false
 
 [theme]
 base = "dark"
-primaryColor = "#3987e5"           # buttons, sliders, selected tabs
-backgroundColor = "#0e1117"
-secondaryBackgroundColor = "#1a1d24"  # sidebar, inputs, cards
-textColor = "#e6e6e3"
-font = "sans serif"
+primaryColor = "#f2a93b"              # saffron amber: primary buttons, sliders, selected tabs
+backgroundColor = "#0c1018"           # blue-black page
+secondaryBackgroundColor = "#1a2231"  # inputs, cards
+textColor = "#e8ebf2"
+linkColor = "#4c8ee6"
+borderColor = "#253044"
+baseRadius = "8px"
+font = "Plus Jakarta Sans:https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+headingFont = "Plus Jakarta Sans:https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
+# Chart series colours, in order (blue, orange, aqua, yellow, magenta, green, violet, red)
+chartCategoricalColors = ["#4c8ee6", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9b8cf2", "#e66767"]
+
+[theme.sidebar]
+backgroundColor = "#0f141e"
+secondaryBackgroundColor = "#131925"

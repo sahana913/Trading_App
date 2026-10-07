@@ -1,6 +1,6 @@
 """
 anomaly.py - Spot users whose trading behaviour is unusual compared with
-everyone else, for the admin app. Unsupervised: there are no labels saying
+everyone else, for the admin pages. Unsupervised: there are no labels saying
 "this user is a problem", so the model only finds the odd ones out.
 
 Behaviour features, one row per trader:

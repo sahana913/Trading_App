@@ -16,7 +16,7 @@ from src.trading import holdings
 from src.trading.simulator import get_clock
 
 user = current_user()
-st.title("Holdings")
+ui.page_header("Holdings", "Delivery (CNC) shares, valued at the latest price.")
 
 with db()() as s:
     ui.require_clock(s)
@@ -28,7 +28,7 @@ def live_holdings() -> None:
         now = get_clock(s)
         data = holdings(s, user["id"], as_of=now)["data"]
     if not data["holdings"]:
-        st.info("No holdings. Buy with product CNC to keep shares overnight.")
+        ui.empty_state("No holdings yet", "Buy with product CNC to keep shares overnight. They appear here with live value and P&L.")
         return
 
     stats = data["statistics"]

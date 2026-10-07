@@ -8,7 +8,7 @@ from src.auth import current_user, db
 from src.trading import cancelorder, modifyorder, orderbook
 
 user = current_user()
-st.title("Orders")
+ui.page_header("Orders", "Modify or cancel what is still waiting; the rest is history.")
 
 with db()() as s:
     clock = ui.require_clock(s)
@@ -23,7 +23,7 @@ with db()() as s:
 
     orders = pd.DataFrame(book["orders"])
     if orders.empty:
-        st.info("No orders yet. Place one in the Terminal.")
+        ui.empty_state("No orders yet", "Place one in the Terminal. It appears here with its status.")
         st.stop()
 
     open_orders = orders[orders["order_status"] == "open"]
@@ -61,7 +61,8 @@ head.subheader("Order book")
 with button:
     ui.csv_download(orders[columns], "Download CSV", f"orders_{clock:%Y%m%d}.csv", key="orders_csv")
 st.dataframe(
-    orders[columns], hide_index=True, width="stretch",
+    orders[columns].style.map(ui.order_status_style, subset=["order_status"]),  # status as a coloured pill
+    hide_index=True, width="stretch",
     column_config={"timestamp": "Date", "filled_quantity": "Filled", "order_status": "Status",
                    "rejection_reason": "Note",
                    "average_price": st.column_config.NumberColumn("Avg price", format="%.2f")},
